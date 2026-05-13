@@ -1259,6 +1259,17 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           headers: { "Accept": "application/xml,text/xml,*/*" }
         });
 
+        // A API pode devolver 400 quando a página solicitada não existe.
+        // Se já importamos páginas anteriores, isso significa fim da paginação.
+        if (response.status === 400 || response.status === 404) {
+          if (allAuthorized.length > 0 || allPathTerms.length > 0) {
+            setStatus(`Fim da importação na página ${pagina - 1}.`);
+            break;
+          }
+
+          throw new Error(`Erro na primeira página: HTTP ${response.status}`);
+        }
+
         if (!response.ok) {
           throw new Error(`Erro na página ${pagina}: HTTP ${response.status}`);
         }
@@ -1269,17 +1280,29 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         allAuthorized = allAuthorized.concat(parsed.authorizedTerms);
         allPathTerms = allPathTerms.concat(parsed.pathDerivedTerms);
 
-        if (parsed.totalTermElements === 0) break;
-        if (parsed.totalTermElements < ALMG_PAGE_SIZE) break;
+        setStatus(
+          `Página ${pagina} importada. Termos autorizados até agora: ${allAuthorized.length}.`
+        );
+
+        // Se a página não trouxe nenhum elemento de termo, acabou.
+        if (parsed.totalTermElements === 0) {
+          break;
+        }
+
+        // Se trouxe menos que o tamanho da página, provavelmente acabou.
+        if (parsed.totalTermElements < ALMG_PAGE_SIZE) {
+          break;
+        }
 
         pagina += 1;
+
+        // Evita chamadas rápidas demais à API.
         await sleep(ALMG_DELAY_MS);
       }
 
       const merged = mergeTermsById(allPathTerms.concat(allAuthorized));
       return corrigirPaisInexistentes(merged);
     }
-
     async function importarThesaurusAlmg() {
       if (!confirm("Importar termos autorizados do Thesaurus da ALMG? Isso substituirá os dados atuais do protótipo.")) {
         return;
