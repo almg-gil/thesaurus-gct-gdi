@@ -4,9 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tesauro - Protótipo HTML</title>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <style>
     :root {
       --border: #d8d8d8;
@@ -18,9 +16,7 @@
       --ok: #267a3e;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -40,9 +36,7 @@
       background: #fff;
     }
 
-    header strong {
-      font-size: 15px;
-    }
+    header strong { font-size: 15px; }
 
     header .user-area {
       display: flex;
@@ -52,9 +46,7 @@
       font-size: 13px;
     }
 
-    input, textarea, select, button {
-      font: inherit;
-    }
+    input, textarea, select, button { font: inherit; }
 
     button {
       cursor: pointer;
@@ -64,9 +56,7 @@
       border-radius: 4px;
     }
 
-    button:hover {
-      background: #f3f3f3;
-    }
+    button:hover { background: #f3f3f3; }
 
     button.primary {
       border-color: var(--blue);
@@ -143,9 +133,7 @@
       white-space: nowrap;
     }
 
-    .tree-item:hover {
-      background: #f5f5f5;
-    }
+    .tree-item:hover { background: #f5f5f5; }
 
     .tree-item.selected {
       background: var(--selected);
@@ -182,13 +170,8 @@
       max-width: 980px;
     }
 
-    .field {
-      margin-bottom: 9px;
-    }
-
-    .field.full {
-      grid-column: 1 / -1;
-    }
+    .field { margin-bottom: 9px; }
+    .field.full { grid-column: 1 / -1; }
 
     .field label {
       display: block;
@@ -239,13 +222,8 @@
       font-weight: bold;
     }
 
-    .panel {
-      display: none;
-    }
-
-    .panel.active {
-      display: block;
-    }
+    .panel { display: none; }
+    .panel.active { display: block; }
 
     .toolbar {
       display: flex;
@@ -283,13 +261,8 @@
       font-size: 12px;
     }
 
-    .status-pill.open {
-      background: #fff3cd;
-    }
-
-    .status-pill.resolved {
-      background: #e2f4e8;
-    }
+    .status-pill.open { background: #fff3cd; }
+    .status-pill.resolved { background: #e2f4e8; }
 
     .empty {
       color: var(--muted);
@@ -308,24 +281,24 @@
       padding-top: 10px;
     }
 
+    #statusMessage {
+      margin-top: 8px;
+      line-height: 1.35;
+    }
+
     @media (max-width: 900px) {
       .app {
         grid-template-columns: 1fr;
         height: auto;
       }
-
       .left {
         border-right: 0;
         border-bottom: 1px solid var(--border);
       }
-
-      .form-grid {
-        grid-template-columns: 1fr;
-      }
+      .form-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
-
 <body>
   <header>
     <strong>Tesauro - Protótipo HTML</strong>
@@ -338,7 +311,6 @@
   <main class="app">
     <aside class="left">
       <div class="section-title">Hierarquia</div>
-
       <div class="search-row">
         <input id="searchInput" type="search" placeholder="Pesquisar termo" />
         <button id="clearSearchBtn">limpar</button>
@@ -348,31 +320,28 @@
 
       <div class="add-box">
         <div class="section-title">Novo termo</div>
-
         <div class="field">
           <label for="newTerm">Termo</label>
           <input id="newTerm" type="text" placeholder="Ex.: Audiência pública" />
         </div>
-
         <div class="field">
           <label for="newParent">Termo geral</label>
           <select id="newParent"></select>
         </div>
-
         <button id="addTermBtn" class="primary">Criar termo</button>
       </div>
 
       <div class="export-box">
         <div class="section-title">Dados</div>
-
         <div class="toolbar">
           <button id="exportBtn">Exportar JSON</button>
           <button id="importBtn">Importar JSON</button>
+          <button id="importAlmgBtn">Importar Thesaurus ALMG</button>
           <button id="resetBtn" class="danger">Restaurar exemplo</button>
         </div>
-
         <input id="importFile" type="file" accept="application/json" hidden />
         <p class="muted">Nesta versão, os dados são salvos no Supabase, na tabela app_state.</p>
+        <p id="statusMessage" class="muted"></p>
       </div>
     </aside>
 
@@ -384,16 +353,20 @@
   <script>
     // ============================================================
     // CONFIGURAÇÃO DO SUPABASE
-    // IMPORTANTE:
-    // 1. Use a Project URL sem /rest/v1 no final.
-    // 2. Use a anon public key.
-    // 3. Não use a chave service_role no HTML.
+    // Use a Project URL sem /rest/v1 no final.
+    // Use a anon public key.
+    // Não use a chave service_role no HTML.
     // ============================================================
-
     const SUPABASE_URL = "https://hyimodkpyzunfrodnola.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5aW1vZGtweXp1bmZyb2Rub2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NzkyMzcsImV4cCI6MjA5NDI1NTIzN30.DmBvcx9_KQM3-ce9-99O5jrfSeAHBo-cMpPGSGcFz3s";
-
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ============================================================
+    // CONFIGURAÇÃO DA API DO THESAURUS DA ALMG
+    // ============================================================
+    const ALMG_THESAURUS_URL = "https://dadosabertosd.almg.gov.br/api/v2/thesaurus/termos/lista";
+    const ALMG_PAGE_SIZE = 100;
+    const ALMG_DELAY_MS = 1100;
 
     const exemplo = {
       selectedId: "comunicacao",
@@ -496,8 +469,14 @@
     const currentUser = document.getElementById("currentUser");
     const exportBtn = document.getElementById("exportBtn");
     const importBtn = document.getElementById("importBtn");
+    const importAlmgBtn = document.getElementById("importAlmgBtn");
     const importFile = document.getElementById("importFile");
     const resetBtn = document.getElementById("resetBtn");
+    const statusMessage = document.getElementById("statusMessage");
+
+    function setStatus(message) {
+      statusMessage.textContent = message || "";
+    }
 
     async function loadState() {
       const { data, error } = await db
@@ -508,28 +487,15 @@
 
       if (error) {
         console.error(error);
-        alert("Não foi possível carregar os dados do Supabase.\n\nDetalhe: " + (error.message || JSON.stringify(error)) + "\n\nO app usará os dados de exemplo.");
+        alert(`Não foi possível carregar os dados do Supabase.
+
+Detalhe: ${error.message || JSON.stringify(error)}
+
+O app usará os dados de exemplo.`);
         return structuredClone(exemplo);
       }
 
       return normalizeState(data?.payload);
-    }
-
-    async function saveState() {
-      state = normalizeState(state);
-
-      const { error } = await db
-        .from("app_state")
-        .upsert({
-          id: "tesauro",
-          payload: state,
-          updated_at: new Date().toISOString()
-        });
-
-      if (error) {
-        console.error(error);
-        alert("Não foi possível salvar os dados no Supabase.\n\nDetalhe: " + (error.message || JSON.stringify(error)));
-      }
     }
 
     function normalizeState(payload) {
@@ -551,14 +517,14 @@
       parsed.expanded = Array.isArray(parsed.expanded) ? parsed.expanded : [];
 
       parsed.terms = parsed.terms.map(term => ({
-        id: term.id || uid("term"),
-        parentId: term.parentId || null,
+        id: String(term.id || uid("term")),
+        parentId: term.parentId ? String(term.parentId) : null,
         termo: term.termo || "Sem termo",
         status: term.status || "candidato",
         definicao: term.definicao || "",
         notaEscopo: term.notaEscopo || "",
         notaUso: term.notaUso || "",
-        relacionados: Array.isArray(term.relacionados) ? term.relacionados : []
+        relacionados: Array.isArray(term.relacionados) ? term.relacionados.map(String) : []
       }));
 
       if (!parsed.selectedId || !parsed.terms.some(t => t.id === parsed.selectedId)) {
@@ -566,6 +532,25 @@
       }
 
       return parsed;
+    }
+
+    async function saveState() {
+      state = normalizeState(state);
+
+      const { error } = await db
+        .from("app_state")
+        .upsert({
+          id: "tesauro",
+          payload: state,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error(error);
+        alert(`Não foi possível salvar os dados no Supabase.
+
+Detalhe: ${error.message || JSON.stringify(error)}`);
+      }
     }
 
     function uid(prefix = "id") {
@@ -576,6 +561,10 @@
       const d = new Date();
       const pad = n => String(n).padStart(2, "0");
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     function getTerm(id) {
@@ -602,27 +591,22 @@
       return parts.reverse().join(" / ");
     }
 
-    function matchesTerm(term, query) {
-      const text = [
-        term.termo,
-        term.definicao,
-        term.notaEscopo,
-        term.notaUso
-      ].join(" ").toLowerCase();
-
-      return text.includes(query.toLowerCase());
-    }
-
     function hasMatchingDescendant(term, query) {
       if (!query) return true;
       if (matchesTerm(term, query)) return true;
       return childrenOf(term.id).some(child => hasMatchingDescendant(child, query));
     }
 
+    function matchesTerm(term, query) {
+      const text = [term.termo, term.definicao, term.notaEscopo, term.notaUso]
+        .join(" ")
+        .toLowerCase();
+      return text.includes(query.toLowerCase());
+    }
+
     function renderTree() {
       const query = searchInput.value.trim();
       treeEl.innerHTML = "";
-
       const roots = childrenOf(null);
 
       if (!roots.length) {
@@ -638,7 +622,6 @@
 
       const children = childrenOf(term.id);
       const expanded = state.expanded.includes(term.id) || Boolean(query);
-
       const item = document.createElement("div");
       item.className = "tree-item" + (term.id === state.selectedId ? " selected" : "");
       item.style.paddingLeft = `${level * 18 + 4}px`;
@@ -647,10 +630,8 @@
       toggle.className = "toggle";
       toggle.textContent = children.length ? (expanded ? "▾" : "▸") : "•";
       toggle.title = expanded ? "Recolher" : "Expandir";
-
       toggle.onclick = async (e) => {
         e.stopPropagation();
-
         if (!children.length) return;
 
         if (state.expanded.includes(term.id)) {
@@ -666,7 +647,6 @@
       const label = document.createElement("button");
       label.className = "term-label";
       label.textContent = term.termo;
-
       label.onclick = async () => {
         state.selectedId = term.id;
         await saveState();
@@ -708,9 +688,7 @@
       const parent = getTerm(term.parentId);
       const children = childrenOf(term.id);
       const relatedTerms = (term.relacionados || []).map(getTerm).filter(Boolean);
-
-      const comments = state.comments
-        .filter(c => c.termId === term.id)
+      const comments = state.comments.filter(c => c.termId === term.id)
         .sort((a, b) => Number(a.resolved) - Number(b.resolved) || String(b.createdAt).localeCompare(String(a.createdAt)));
 
       termArea.innerHTML = `
@@ -731,29 +709,24 @@
               <label>Termo</label>
               <input id="editTermo" value="${escapeAttr(term.termo)}" />
             </div>
-
             <div class="field full">
               <label>Definição</label>
               <textarea id="editDefinicao">${escapeHtml(term.definicao || "")}</textarea>
             </div>
-
             <div class="field full">
               <label>Nota de escopo</label>
               <textarea id="editNotaEscopo">${escapeHtml(term.notaEscopo || "")}</textarea>
             </div>
-
             <div class="field full">
               <label>Nota de uso</label>
               <textarea id="editNotaUso">${escapeHtml(term.notaUso || "")}</textarea>
             </div>
-
             <div class="field">
               <label>Status</label>
               <select id="editStatus">
                 ${statusOptions(term.status)}
               </select>
             </div>
-
             <div class="field">
               <label>Termo geral</label>
               <select id="editParent">
@@ -761,7 +734,6 @@
               </select>
             </div>
           </div>
-
           <div class="toolbar">
             <button id="saveTermBtn" class="primary">Salvar alterações</button>
             <button id="deleteTermBtn" class="danger">Excluir termo</button>
@@ -782,7 +754,6 @@
           <div class="relation-box">
             <strong>Termos relacionados</strong>
             ${relatedTerms.length ? `<ul class="small-list">${relatedTerms.map(r => `<li>${escapeHtml(r.termo)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
-
             <div class="toolbar">
               <select id="addRelatedSelect">${relatedOptions(term.id)}</select>
               <button id="addRelatedBtn">Adicionar relação</button>
@@ -795,11 +766,8 @@
             <label>Novo comentário</label>
             <textarea id="newCommentText" placeholder="Escreva uma observação sobre este termo..."></textarea>
           </div>
-
           <button id="addCommentBtn" class="primary">Adicionar comentário</button>
-
           <hr>
-
           <div id="commentsList">
             ${comments.length ? comments.map(renderCommentHtml).join("") : '<div class="empty">Nenhum comentário para este termo.</div>'}
           </div>
@@ -838,9 +806,7 @@
         .filter(t => t.id !== currentId && !selected.has(t.id))
         .slice()
         .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
-        .forEach(t => {
-          options.push(`<option value="${t.id}">${escapeHtml(termPath(t))}</option>`);
-        });
+        .forEach(t => options.push(`<option value="${t.id}">${escapeHtml(termPath(t))}</option>`));
 
       return options.join("");
     }
@@ -851,11 +817,7 @@
 
       while (current && current.parentId && !guard.has(current.id)) {
         guard.add(current.id);
-
-        if (current.parentId === possibleAncestorId) {
-          return true;
-        }
-
+        if (current.parentId === possibleAncestorId) return true;
         current = getTerm(current.parentId);
       }
 
@@ -865,24 +827,17 @@
     function renderCommentHtml(c) {
       const statusClass = c.resolved ? "resolved" : "open";
       const statusLabel = c.resolved ? "resolvido" : "aberto";
-      const footer = c.resolved
-        ? `<div class="muted">Resolvido por ${escapeHtml(c.resolvedBy || "")} em ${escapeHtml(c.resolvedAt || "")}</div>`
-        : "";
+      const footer = c.resolved ? `<div class="muted">Resolvido por ${escapeHtml(c.resolvedBy || "")} em ${escapeHtml(c.resolvedAt || "")}</div>` : "";
 
       return `
         <div class="comment-box ${c.resolved ? "resolved" : ""}">
           <div class="comment-head">
-            <div>
-              <strong>${escapeHtml(c.author)}</strong>
-              <span class="muted">· ${escapeHtml(c.createdAt)}</span>
-            </div>
+            <div><strong>${escapeHtml(c.author)}</strong> <span class="muted">· ${escapeHtml(c.createdAt)}</span></div>
             <span class="status-pill ${statusClass}">${statusLabel}</span>
           </div>
-
-          <div>${escapeHtml(c.text).replace(/\n/g, "<br>")}</div>
-
+          <div>${escapeHtml(c.text).replace(/
+/g, "<br>")}</div>
           ${footer}
-
           <div class="toolbar">
             ${c.resolved
               ? `<button data-comment-action="reopen" data-comment-id="${c.id}">Reabrir</button>`
@@ -897,14 +852,12 @@
         tab.addEventListener("click", () => {
           document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
           document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-
           tab.classList.add("active");
           document.getElementById(tab.dataset.tab).classList.add("active");
         });
       });
 
       const saveBtn = document.getElementById("saveTermBtn");
-
       if (saveBtn) {
         saveBtn.onclick = async () => {
           term.termo = document.getElementById("editTermo").value.trim() || term.termo;
@@ -913,63 +866,43 @@
           term.notaUso = document.getElementById("editNotaUso").value.trim();
           term.status = document.getElementById("editStatus").value;
           term.parentId = document.getElementById("editParent").value || null;
-
           await saveState();
           render();
         };
       }
 
       const deleteBtn = document.getElementById("deleteTermBtn");
-
       if (deleteBtn) {
         deleteBtn.onclick = async () => {
           if (childrenOf(term.id).length) {
             alert("Não é possível excluir termo com termos específicos. Mova ou exclua os filhos primeiro.");
             return;
           }
-
-          if (!confirm(`Excluir o termo "${term.termo}"?`)) {
-            return;
-          }
-
+          if (!confirm(`Excluir o termo "${term.termo}"?`)) return;
           state.terms = state.terms.filter(t => t.id !== term.id);
           state.comments = state.comments.filter(c => c.termId !== term.id);
-
           state.terms.forEach(t => {
             t.relacionados = (t.relacionados || []).filter(id => id !== term.id);
           });
-
           state.selectedId = state.terms[0]?.id || null;
-
           await saveState();
           render();
         };
       }
 
       const addRelatedBtn = document.getElementById("addRelatedBtn");
-
       if (addRelatedBtn) {
         addRelatedBtn.onclick = async () => {
           const relatedId = document.getElementById("addRelatedSelect").value;
-
-          if (!relatedId) {
-            return;
-          }
+          if (!relatedId) return;
 
           term.relacionados = term.relacionados || [];
-
-          if (!term.relacionados.includes(relatedId)) {
-            term.relacionados.push(relatedId);
-          }
+          if (!term.relacionados.includes(relatedId)) term.relacionados.push(relatedId);
 
           const other = getTerm(relatedId);
-
           if (other) {
             other.relacionados = other.relacionados || [];
-
-            if (!other.relacionados.includes(term.id)) {
-              other.relacionados.push(term.id);
-            }
+            if (!other.relacionados.includes(term.id)) other.relacionados.push(term.id);
           }
 
           await saveState();
@@ -978,14 +911,10 @@
       }
 
       const addCommentBtn = document.getElementById("addCommentBtn");
-
       if (addCommentBtn) {
         addCommentBtn.onclick = async () => {
           const text = document.getElementById("newCommentText").value.trim();
-
-          if (!text) {
-            return;
-          }
+          if (!text) return;
 
           state.comments.push({
             id: uid("comment"),
@@ -1007,10 +936,7 @@
       document.querySelectorAll("[data-comment-action]").forEach(btn => {
         btn.onclick = async () => {
           const comment = state.comments.find(c => c.id === btn.dataset.commentId);
-
-          if (!comment) {
-            return;
-          }
+          if (!comment) return;
 
           if (btn.dataset.commentAction === "resolve") {
             comment.resolved = true;
@@ -1030,18 +956,12 @@
     }
 
     function setActiveTab(tabId) {
-      document.querySelectorAll(".tab").forEach(t => {
-        t.classList.toggle("active", t.dataset.tab === tabId);
-      });
-
-      document.querySelectorAll(".panel").forEach(p => {
-        p.classList.toggle("active", p.id === tabId);
-      });
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tabId));
+      document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === tabId));
     }
 
     async function addTerm() {
       state = normalizeState(state);
-
       const value = newTerm.value.trim();
 
       if (!value) {
@@ -1063,10 +983,7 @@
         relacionados: []
       });
 
-      if (parentId && !state.expanded.includes(parentId)) {
-        state.expanded.push(parentId);
-      }
-
+      if (parentId && !state.expanded.includes(parentId)) state.expanded.push(parentId);
       state.selectedId = id;
       newTerm.value = "";
 
@@ -1075,41 +992,317 @@
     }
 
     function exportJson() {
-      const blob = new Blob([JSON.stringify(state, null, 2)], {
-        type: "application/json"
-      });
-
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-
       a.href = url;
       a.download = `tesauro-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
-
       URL.revokeObjectURL(url);
     }
 
     function importJson(file) {
       const reader = new FileReader();
-
       reader.onload = async () => {
         try {
           const imported = JSON.parse(reader.result);
-
           if (!Array.isArray(imported.terms) || !Array.isArray(imported.comments)) {
             throw new Error("Arquivo inválido");
           }
-
           state = normalizeState(imported);
-
           await saveState();
           render();
         } catch (e) {
           alert("Não foi possível importar o JSON.");
         }
       };
-
       reader.readAsText(file);
+    }
+
+    // ============================================================
+    // Importação do Thesaurus ALMG
+    // Busca todas as páginas e filtra apenas <autorizado>true</autorizado>.
+    // ============================================================
+    function sameName(localName, names) {
+      const normalized = String(localName || "")
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase();
+
+      return names.some(name => {
+        const n = String(name)
+          .normalize("NFD")
+          .replace(/[̀-ͯ]/g, "")
+          .toLowerCase();
+        return normalized === n;
+      });
+    }
+
+    function getDirectChildElement(element, possibleNames) {
+      for (const child of Array.from(element.children || [])) {
+        if (sameName(child.localName, possibleNames)) return child;
+      }
+      return null;
+    }
+
+    function getDirectChildText(element, possibleNames) {
+      const child = getDirectChildElement(element, possibleNames);
+      return child ? String(child.textContent || "").trim() : "";
+    }
+
+    function getDescendantText(element, possibleNames) {
+      const descendants = Array.from(element.getElementsByTagName("*"));
+      for (const child of descendants) {
+        if (sameName(child.localName, possibleNames)) {
+          return String(child.textContent || "").trim();
+        }
+      }
+      return "";
+    }
+
+    function getBestText(element, possibleNames) {
+      return getDirectChildText(element, possibleNames) || getDescendantText(element, possibleNames);
+    }
+
+    function parseBool(value) {
+      return ["true", "1", "sim", "s"].includes(String(value || "").trim().toLowerCase());
+    }
+
+    function makeSafeId(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return uid("almg");
+      return `almg-${raw.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+    }
+
+    function getTermParentIdFromXml(element) {
+      const directParentId = getBestText(element, [
+        "termoPaiId",
+        "idTermoPai",
+        "termoGeralId",
+        "idTermoGeral",
+        "idPai",
+        "paiId",
+        "idAscendente",
+        "ascendenteId"
+      ]);
+
+      if (directParentId) return makeSafeId(directParentId);
+
+      const parentElement = getDirectChildElement(element, [
+        "termoPai",
+        "termoGeral",
+        "pai",
+        "ascendente",
+        "termoAscendente"
+      ]);
+
+      if (parentElement) {
+        const nestedParentId = getBestText(parentElement, ["id", "codigo", "cod", "controle", "idTermo"]);
+        if (nestedParentId) return makeSafeId(nestedParentId);
+      }
+
+      return null;
+    }
+
+    function getHierarchyPathsFromXml(element) {
+      const paths = [];
+      const candidates = Array.from(element.getElementsByTagName("*"));
+
+      for (const node of candidates) {
+        if (sameName(node.localName, ["hierarquia", "caminho", "path", "ocorrenciaHierarquia", "ocorrenciasHierarquias"])) {
+          const text = String(node.textContent || "").trim();
+          if (text.includes("/") && text.length < 1000) paths.push(text);
+        }
+      }
+
+      return [...new Set(paths)];
+    }
+
+    function xmlToTerms(xmlText) {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlText, "application/xml");
+      const parserError = xml.querySelector("parsererror");
+
+      if (parserError) {
+        throw new Error("Erro ao interpretar XML retornado pela API.");
+      }
+
+      const termElements = Array.from(xml.getElementsByTagName("*")).filter(el => {
+        return getDirectChildText(el, ["autorizado"]) !== "";
+      });
+
+      const authorized = [];
+      const pathDerivedTerms = new Map();
+
+      for (const element of termElements) {
+        const autorizado = parseBool(getDirectChildText(element, ["autorizado"]));
+        if (!autorizado) continue;
+
+        const rawId = getBestText(element, ["id", "codigo", "cod", "controle", "idTermo", "identificador"]);
+        const termo = getBestText(element, ["termo", "descricao", "descritor", "nome", "nomeTermo"]);
+
+        if (!termo) continue;
+
+        const id = makeSafeId(rawId || termo);
+        const parentId = getTermParentIdFromXml(element);
+        const definicao = getBestText(element, ["definicao", "definição", "notaExplicativa", "nota", "conceito"]);
+        const notaEscopo = getBestText(element, ["notaEscopo", "notaDeEscopo", "escopo"]);
+        const notaUso = getBestText(element, ["notaUso", "notaDeUso", "uso"]);
+
+        const term = {
+          id,
+          parentId,
+          termo,
+          status: "publicado",
+          definicao,
+          notaEscopo,
+          notaUso,
+          relacionados: []
+        };
+
+        authorized.push(term);
+
+        const paths = getHierarchyPathsFromXml(element);
+        for (const path of paths) {
+          const parts = path
+            .split("/")
+            .map(p => p.trim())
+            .filter(Boolean)
+            .filter(p => !["thesaurus", "tesauro"].includes(p.toLowerCase()));
+
+          if (parts.length > 1) {
+            let previousId = null;
+            for (const part of parts) {
+              const pathId = makeSafeId(`path-${part}`);
+              if (!pathDerivedTerms.has(pathId)) {
+                pathDerivedTerms.set(pathId, {
+                  id: pathId,
+                  parentId: previousId,
+                  termo: part,
+                  status: "publicado",
+                  definicao: "",
+                  notaEscopo: "",
+                  notaUso: "",
+                  relacionados: []
+                });
+              }
+              previousId = pathId;
+            }
+          }
+        }
+      }
+
+      return {
+        totalTermElements: termElements.length,
+        authorizedTerms: authorized,
+        pathDerivedTerms: Array.from(pathDerivedTerms.values())
+      };
+    }
+
+    function mergeTermsById(terms) {
+      const map = new Map();
+
+      for (const term of terms) {
+        if (!map.has(term.id)) {
+          map.set(term.id, term);
+          continue;
+        }
+
+        const current = map.get(term.id);
+        map.set(term.id, {
+          ...current,
+          ...term,
+          definicao: term.definicao || current.definicao || "",
+          notaEscopo: term.notaEscopo || current.notaEscopo || "",
+          notaUso: term.notaUso || current.notaUso || "",
+          parentId: term.parentId || current.parentId || null,
+          relacionados: Array.from(new Set([...(current.relacionados || []), ...(term.relacionados || [])]))
+        });
+      }
+
+      return Array.from(map.values());
+    }
+
+    function corrigirPaisInexistentes(terms) {
+      const ids = new Set(terms.map(t => t.id));
+
+      return terms.map(t => {
+        if (!t.parentId || ids.has(t.parentId)) return t;
+        return { ...t, parentId: null };
+      });
+    }
+
+    async function baixarTodosTermosAlmg() {
+      let pagina = 1;
+      let allAuthorized = [];
+      let allPathTerms = [];
+
+      while (true) {
+        const url = `${ALMG_THESAURUS_URL}?p=${pagina}&tp=${ALMG_PAGE_SIZE}`;
+        setStatus(`Importando página ${pagina}...`);
+
+        const response = await fetch(url, {
+          headers: { "Accept": "application/xml,text/xml,*/*" }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Erro na página ${pagina}: HTTP ${response.status}`);
+        }
+
+        const xmlText = await response.text();
+        const parsed = xmlToTerms(xmlText);
+
+        allAuthorized = allAuthorized.concat(parsed.authorizedTerms);
+        allPathTerms = allPathTerms.concat(parsed.pathDerivedTerms);
+
+        if (parsed.totalTermElements === 0) break;
+        if (parsed.totalTermElements < ALMG_PAGE_SIZE) break;
+
+        pagina += 1;
+        await sleep(ALMG_DELAY_MS);
+      }
+
+      const merged = mergeTermsById(allPathTerms.concat(allAuthorized));
+      return corrigirPaisInexistentes(merged);
+    }
+
+    async function importarThesaurusAlmg() {
+      if (!confirm("Importar termos autorizados do Thesaurus da ALMG? Isso substituirá os dados atuais do protótipo.")) {
+        return;
+      }
+
+      try {
+        importAlmgBtn.disabled = true;
+        setStatus("Iniciando importação do Thesaurus ALMG...");
+
+        const termos = await baixarTodosTermosAlmg();
+
+        if (!termos.length) {
+          throw new Error("Nenhum termo autorizado foi identificado no XML retornado pela API.");
+        }
+
+        state = normalizeState({
+          selectedId: termos[0]?.id || null,
+          expanded: [],
+          terms: termos,
+          comments: []
+        });
+
+        await saveState();
+        render();
+        setStatus(`Importação concluída. Termos carregados: ${termos.length}.`);
+        alert(`Importação concluída. Termos carregados: ${termos.length}.`);
+      } catch (error) {
+        console.error(error);
+        setStatus("Erro na importação.");
+        alert(`Erro ao importar Thesaurus da ALMG.
+
+Detalhe: ${error.message}
+
+Se aparecer erro de CORS no console do navegador, a importação direta pelo GitHub Pages está bloqueada e será necessário usar um script Python ou uma função intermediária.`);
+      } finally {
+        importAlmgBtn.disabled = false;
+      }
     }
 
     function escapeHtml(value) {
@@ -1133,43 +1326,29 @@
     }
 
     searchInput.addEventListener("input", renderTree);
-
     clearSearchBtn.addEventListener("click", () => {
       searchInput.value = "";
       renderTree();
     });
 
     addTermBtn.addEventListener("click", addTerm);
-
     newTerm.addEventListener("keydown", e => {
-      if (e.key === "Enter") {
-        addTerm();
-      }
+      if (e.key === "Enter") addTerm();
     });
 
     exportBtn.addEventListener("click", exportJson);
-
-    importBtn.addEventListener("click", () => {
-      importFile.click();
-    });
+    importBtn.addEventListener("click", () => importFile.click());
+    importAlmgBtn.addEventListener("click", importarThesaurusAlmg);
 
     importFile.addEventListener("change", e => {
       const file = e.target.files[0];
-
-      if (file) {
-        importJson(file);
-      }
-
+      if (file) importJson(file);
       importFile.value = "";
     });
 
     resetBtn.addEventListener("click", async () => {
-      if (!confirm("Restaurar os dados de exemplo? Isso substituirá os dados salvos no Supabase.")) {
-        return;
-      }
-
+      if (!confirm("Restaurar os dados de exemplo? Isso substituirá os dados salvos no Supabase.")) return;
       state = structuredClone(exemplo);
-
       await saveState();
       render();
     });
