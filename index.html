@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tesauro - Protótipo HTML</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --border: #d8d8d8;
+      --muted: #666;
+      --soft: #f7f7f7;
+      --selected: #e8f0fe;
+      --blue: #1f5fbf;
+      --danger: #a83232;
+      --ok: #267a3e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+      color: #111;
+      background: white;
+    }
+
+    header {
+      height: 42px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      background: #fff;
+    }
+
+    header strong {
+      font-size: 15px;
+    }
+
+    header .user-area {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    input, textarea, select, button {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: #fff;
+      padding: 5px 8px;
+      border-radius: 4px;
+    }
+
+    button:hover {
+      background: #f3f3f3;
+    }
+
+    button.primary {
+      border-color: var(--blue);
+      color: white;
+      background: var(--blue);
+    }
+
+    button.danger {
+      border-color: #c9a0a0;
+      color: var(--danger);
+    }
+
+    button.success {
+      border-color: #9ac9a5;
+      color: var(--ok);
+    }
+
+    .app {
+      height: calc(100vh - 42px);
+      display: grid;
+      grid-template-columns: 360px 1fr;
+    }
+
+    .left {
+      border-right: 1px solid var(--border);
+      padding: 10px;
+      overflow: auto;
+      background: #fff;
+    }
+
+    .right {
+      padding: 10px 14px;
+      overflow: auto;
+      background: #fff;
+    }
+
+    .section-title {
+      font-weight: bold;
+      margin: 6px 0 8px;
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .search-row input,
+    .field input,
+    .field textarea,
+    .field select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px;
+      background: #fff;
+    }
+
+    .tree-box {
+      border: 1px solid var(--border);
+      min-height: 360px;
+      padding: 6px;
+      background: #fff;
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 24px;
+      padding: 1px 4px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .tree-item:hover {
+      background: #f5f5f5;
+    }
+
+    .tree-item.selected {
+      background: var(--selected);
+      color: #0b3d91;
+      font-weight: bold;
+    }
+
+    .toggle {
+      width: 20px;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: #333;
+    }
+
+    .term-label {
+      flex: 1;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 3px;
+    }
+
+    .add-box {
+      margin-top: 12px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      max-width: 980px;
+    }
+
+    .field {
+      margin-bottom: 9px;
+    }
+
+    .field.full {
+      grid-column: 1 / -1;
+    }
+
+    .field label {
+      display: block;
+      color: #333;
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 72px;
+    }
+
+    .term-header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+
+    .term-header h1 {
+      font-size: 20px;
+      margin: 0 0 3px;
+      font-weight: normal;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      margin: 8px 0 12px;
+    }
+
+    .tab {
+      padding: 8px 12px;
+      border: 1px solid transparent;
+      border-bottom: 0;
+      background: transparent;
+      border-radius: 4px 4px 0 0;
+    }
+
+    .tab.active {
+      border-color: var(--border);
+      background: white;
+      font-weight: bold;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .relation-box,
+    .comment-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 8px;
+      background: #fff;
+    }
+
+    .comment-box.resolved {
+      background: var(--soft);
+      color: #555;
+    }
+
+    .comment-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 5px;
+    }
+
+    .status-pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: #eee;
+      font-size: 12px;
+    }
+
+    .status-pill.open {
+      background: #fff3cd;
+    }
+
+    .status-pill.resolved {
+      background: #e2f4e8;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 10px;
+    }
+
+    .small-list {
+      line-height: 1.7;
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .export-box {
+      margin-top: 16px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
+    @media (max-width: 900px) {
+      .app {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .left {
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Tesauro - Protótipo HTML</strong>
+    <div class="user-area">
+      <span>Usuário:</span>
+      <input id="currentUser" type="text" value="Maria" aria-label="Usuário atual" />
+    </div>
+  </header>
+
+  <main class="app">
+    <aside class="left">
+      <div class="section-title">Hierarquia</div>
+      <div class="search-row">
+        <input id="searchInput" type="search" placeholder="Pesquisar termo" />
+        <button id="clearSearchBtn">limpar</button>
+      </div>
+
+      <div id="tree" class="tree-box"></div>
+
+      <div class="add-box">
+        <div class="section-title">Novo termo</div>
+        <div class="field">
+          <label for="newTerm">Termo</label>
+          <input id="newTerm" type="text" placeholder="Ex.: Audiência pública" />
+        </div>
+        <div class="field">
+          <label for="newParent">Termo geral</label>
+          <select id="newParent"></select>
+        </div>
+        <button id="addTermBtn" class="primary">Criar termo</button>
+      </div>
+
+      <div class="export-box">
+        <div class="section-title">Dados</div>
+        <div class="toolbar">
+          <button id="exportBtn">Exportar JSON</button>
+          <button id="importBtn">Importar JSON</button>
+          <button id="resetBtn" class="danger">Restaurar exemplo</button>
+        </div>
+        <input id="importFile" type="file" accept="application/json" hidden />
+        <p class="muted">Nesta versão, os dados são salvos no Supabase, na tabela app_state.</p>
+      </div>
+    </aside>
+
+    <section class="right">
+      <div id="termArea"></div>
+    </section>
+  </main>
+
+  <script>
+    // ============================================================
+    // CONFIGURAÇÃO DO SUPABASE
+    // Cole aqui a Project URL e a anon public key do seu projeto.
+    // Não use a chave service_role no HTML.
+    // ============================================================
+    const SUPABASE_URL = "https://hyimodkpyzunfrodnola.supabase.co/rest/v1/";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5aW1vZGtweXp1bmZyb2Rub2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NzkyMzcsImV4cCI6MjA5NDI1NTIzN30.DmBvcx9_KQM3-ce9-99O5jrfSeAHBo-cMpPGSGcFz3s";
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const exemplo = {
+      selectedId: "comunicacao",
+      expanded: ["tema", "administracao", "comunicacao"],
+      terms: [
+        {
+          id: "tema",
+          parentId: null,
+          termo: "Tema",
+          status: "publicado",
+          definicao: "Categoria geral para organização inicial do vocabulário.",
+          notaEscopo: "Use como raiz para grandes áreas temáticas.",
+          notaUso: "Não usar diretamente na indexação.",
+          relacionados: []
+        },
+        {
+          id: "administracao",
+          parentId: "tema",
+          termo: "Administração Pública",
+          status: "em revisão",
+          definicao: "Atividades de organização, gestão e funcionamento da administração pública.",
+          notaEscopo: "Usar para temas gerais de gestão pública.",
+          notaUso: "",
+          relacionados: ["servidor-publico"]
+        },
+        {
+          id: "comunicacao",
+          parentId: "tema",
+          termo: "Comunicação",
+          status: "em revisão",
+          definicao: "Processo de envio, transmissão e recepção de mensagens entre emissor e destinatário.",
+          notaEscopo: "Usar para assuntos relativos à comunicação institucional, social ou tecnológica.",
+          notaUso: "Quando o enfoque for publicidade oficial, avaliar termo específico.",
+          relacionados: ["transparencia"]
+        },
+        {
+          id: "educacao",
+          parentId: "tema",
+          termo: "Educação",
+          status: "em revisão",
+          definicao: "Políticas, instituições e práticas educacionais.",
+          notaEscopo: "",
+          notaUso: "",
+          relacionados: []
+        },
+        {
+          id: "servidor-publico",
+          parentId: "administracao",
+          termo: "Servidor público",
+          status: "candidato",
+          definicao: "Pessoa legalmente investida em cargo público.",
+          notaEscopo: "",
+          notaUso: "",
+          relacionados: ["administracao"]
+        },
+        {
+          id: "transparencia",
+          parentId: "administracao",
+          termo: "Transparência administrativa",
+          status: "candidato",
+          definicao: "Disponibilização de informações públicas para controle social e institucional.",
+          notaEscopo: "",
+          notaUso: "",
+          relacionados: ["comunicacao"]
+        }
+      ],
+      comments: [
+        {
+          id: "c1",
+          termId: "comunicacao",
+          author: "João",
+          text: "Rever a definição para diferenciar comunicação institucional de comunicação social.",
+          createdAt: "2026-05-13 09:10",
+          resolved: false,
+          resolvedBy: null,
+          resolvedAt: null
+        },
+        {
+          id: "c2",
+          termId: "comunicacao",
+          author: "Ana",
+          text: "Verificar se 'publicidade' deve ser termo específico ou relacionado.",
+          createdAt: "2026-05-13 10:20",
+          resolved: true,
+          resolvedBy: "Maria",
+          resolvedAt: "2026-05-13 11:00"
+        }
+      ]
+    };
+
+    let state = structuredClone(exemplo);
+
+    const treeEl = document.getElementById("tree");
+    const searchInput = document.getElementById("searchInput");
+    const clearSearchBtn = document.getElementById("clearSearchBtn");
+    const termArea = document.getElementById("termArea");
+    const newTerm = document.getElementById("newTerm");
+    const newParent = document.getElementById("newParent");
+    const addTermBtn = document.getElementById("addTermBtn");
+    const currentUser = document.getElementById("currentUser");
+    const exportBtn = document.getElementById("exportBtn");
+    const importBtn = document.getElementById("importBtn");
+    const importFile = document.getElementById("importFile");
+    const resetBtn = document.getElementById("resetBtn");
+
+    async function loadState() {
+      const { data, error } = await db
+        .from("app_state")
+        .select("payload")
+        .eq("id", "tesauro")
+        .single();
+
+      if (error) {
+        console.error(error);
+        alert("Não foi possível carregar os dados do Supabase.
+
+Detalhe: " + (error.message || JSON.stringify(error)) + "
+
+O app usará os dados de exemplo.");
+        return structuredClone(exemplo);
+      }
+
+      return normalizeState(data?.payload);
+    }
+
+    function normalizeState(payload) {
+      let parsed = payload;
+
+      if (typeof parsed === "string") {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch {
+          parsed = null;
+        }
+      }
+
+      if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.terms)) {
+        return structuredClone(exemplo);
+      }
+
+      parsed.comments = Array.isArray(parsed.comments) ? parsed.comments : [];
+      parsed.expanded = Array.isArray(parsed.expanded) ? parsed.expanded : [];
+
+      parsed.terms = parsed.terms.map(term => ({
+        id: term.id || uid("term"),
+        parentId: term.parentId || null,
+        termo: term.termo || "Sem termo",
+        status: term.status || "candidato",
+        definicao: term.definicao || "",
+        notaEscopo: term.notaEscopo || "",
+        notaUso: term.notaUso || "",
+        relacionados: Array.isArray(term.relacionados) ? term.relacionados : []
+      }));
+
+      if (!parsed.selectedId || !parsed.terms.some(t => t.id === parsed.selectedId)) {
+        parsed.selectedId = parsed.terms[0]?.id || null;
+      }
+
+      return parsed;
+    }
+
+    async function saveState() {
+      const { error } = await db
+        .from("app_state")
+        .upsert({
+          id: "tesauro",
+          payload: state,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error(error);
+        alert("Não foi possível salvar os dados no Supabase.
+
+Detalhe: " + (error.message || JSON.stringify(error)));
+      }
+    }
+
+    function uid(prefix = "id") {
+      return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function nowLabel() {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function getTerm(id) {
+      return state.terms.find(t => t.id === id) || null;
+    }
+
+    function childrenOf(parentId) {
+      return state.terms
+        .filter(t => t.parentId === parentId)
+        .sort((a, b) => a.termo.localeCompare(b.termo, "pt-BR"));
+    }
+
+    function termPath(term) {
+      const parts = [];
+      let current = term;
+      const guard = new Set();
+      while (current && !guard.has(current.id)) {
+        guard.add(current.id);
+        parts.push(current.termo);
+        current = getTerm(current.parentId);
+      }
+      return parts.reverse().join(" / ");
+    }
+
+    function hasMatchingDescendant(term, query) {
+      if (!query) return true;
+      if (matchesTerm(term, query)) return true;
+      return childrenOf(term.id).some(child => hasMatchingDescendant(child, query));
+    }
+
+    function matchesTerm(term, query) {
+      const text = [term.termo, term.definicao, term.notaEscopo, term.notaUso]
+        .join(" ")
+        .toLowerCase();
+      return text.includes(query.toLowerCase());
+    }
+
+    function renderTree() {
+      const query = searchInput.value.trim();
+      treeEl.innerHTML = "";
+      const roots = childrenOf(null);
+
+      if (!roots.length) {
+        treeEl.innerHTML = '<div class="empty">Nenhum termo cadastrado.</div>';
+        return;
+      }
+
+      roots.forEach(root => renderTreeNode(root, 0, query));
+    }
+
+    function renderTreeNode(term, level, query) {
+      if (query && !hasMatchingDescendant(term, query)) return;
+
+      const children = childrenOf(term.id);
+      const expanded = state.expanded.includes(term.id) || Boolean(query);
+      const item = document.createElement("div");
+      item.className = "tree-item" + (term.id === state.selectedId ? " selected" : "");
+      item.style.paddingLeft = `${level * 18 + 4}px`;
+
+      const toggle = document.createElement("button");
+      toggle.className = "toggle";
+      toggle.textContent = children.length ? (expanded ? "▾" : "▸") : "•";
+      toggle.title = expanded ? "Recolher" : "Expandir";
+      toggle.onclick = (e) => {
+        e.stopPropagation();
+        if (!children.length) return;
+        if (state.expanded.includes(term.id)) {
+          state.expanded = state.expanded.filter(id => id !== term.id);
+        } else {
+          state.expanded.push(term.id);
+        }
+        saveState();
+        render();
+      };
+
+      const label = document.createElement("button");
+      label.className = "term-label";
+      label.textContent = term.termo;
+      label.onclick = () => {
+        state.selectedId = term.id;
+        saveState();
+        render();
+      };
+
+      item.appendChild(toggle);
+      item.appendChild(label);
+      treeEl.appendChild(item);
+
+      if (expanded) {
+        children.forEach(child => renderTreeNode(child, level + 1, query));
+      }
+    }
+
+    function renderParentOptions() {
+      newParent.innerHTML = '<option value="">Sem termo geral</option>';
+      state.terms
+        .slice()
+        .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
+        .forEach(term => {
+          const option = document.createElement("option");
+          option.value = term.id;
+          option.textContent = termPath(term);
+          option.selected = term.id === state.selectedId;
+          newParent.appendChild(option);
+        });
+    }
+
+    function renderTermArea() {
+      const term = getTerm(state.selectedId);
+      if (!term) {
+        termArea.innerHTML = '<div class="empty">Selecione ou crie um termo.</div>';
+        return;
+      }
+
+      const parent = getTerm(term.parentId);
+      const children = childrenOf(term.id);
+      const relatedTerms = (term.relacionados || []).map(getTerm).filter(Boolean);
+      const comments = state.comments.filter(c => c.termId === term.id)
+        .sort((a, b) => Number(a.resolved) - Number(b.resolved) || b.createdAt.localeCompare(a.createdAt));
+
+      termArea.innerHTML = `
+        <div class="term-header">
+          <h1>${escapeHtml(term.termo)}</h1>
+          <div class="muted">${escapeHtml(termPath(term))}</div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="cadastro">Cadastro</button>
+          <button class="tab" data-tab="relacoes">Relacionamentos</button>
+          <button class="tab" data-tab="comentarios">Comentários (${comments.filter(c => !c.resolved).length} abertos)</button>
+        </div>
+
+        <div id="cadastro" class="panel active">
+          <div class="form-grid">
+            <div class="field full">
+              <label>Termo</label>
+              <input id="editTermo" value="${escapeAttr(term.termo)}" />
+            </div>
+            <div class="field full">
+              <label>Definição</label>
+              <textarea id="editDefinicao">${escapeHtml(term.definicao || "")}</textarea>
+            </div>
+            <div class="field full">
+              <label>Nota de escopo</label>
+              <textarea id="editNotaEscopo">${escapeHtml(term.notaEscopo || "")}</textarea>
+            </div>
+            <div class="field full">
+              <label>Nota de uso</label>
+              <textarea id="editNotaUso">${escapeHtml(term.notaUso || "")}</textarea>
+            </div>
+            <div class="field">
+              <label>Status</label>
+              <select id="editStatus">
+                ${statusOptions(term.status)}
+              </select>
+            </div>
+            <div class="field">
+              <label>Termo geral</label>
+              <select id="editParent">
+                ${parentOptions(term.id, term.parentId)}
+              </select>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button id="saveTermBtn" class="primary">Salvar alterações</button>
+            <button id="deleteTermBtn" class="danger">Excluir termo</button>
+          </div>
+        </div>
+
+        <div id="relacoes" class="panel">
+          <div class="relation-box">
+            <strong>Termo geral</strong><br>
+            ${parent ? escapeHtml(parent.termo) : '<span class="muted">—</span>'}
+          </div>
+
+          <div class="relation-box">
+            <strong>Termos específicos</strong>
+            ${children.length ? `<ul class="small-list">${children.map(c => `<li>${escapeHtml(c.termo)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
+          </div>
+
+          <div class="relation-box">
+            <strong>Termos relacionados</strong>
+            ${relatedTerms.length ? `<ul class="small-list">${relatedTerms.map(r => `<li>${escapeHtml(r.termo)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
+            <div class="toolbar">
+              <select id="addRelatedSelect">${relatedOptions(term.id)}</select>
+              <button id="addRelatedBtn">Adicionar relação</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="comentarios" class="panel">
+          <div class="field">
+            <label>Novo comentário</label>
+            <textarea id="newCommentText" placeholder="Escreva uma observação sobre este termo..."></textarea>
+          </div>
+          <button id="addCommentBtn" class="primary">Adicionar comentário</button>
+          <hr>
+          <div id="commentsList">
+            ${comments.length ? comments.map(renderCommentHtml).join("") : '<div class="empty">Nenhum comentário para este termo.</div>'}
+          </div>
+        </div>
+      `;
+
+      wireTermArea(term);
+    }
+
+    function statusOptions(current) {
+      return ["candidato", "em revisão", "aprovado", "publicado", "obsoleto"]
+        .map(s => `<option value="${s}" ${s === current ? "selected" : ""}>${s}</option>`)
+        .join("");
+    }
+
+    function parentOptions(currentId, selectedParentId) {
+      const options = ['<option value="">Sem termo geral</option>'];
+      state.terms
+        .filter(t => t.id !== currentId && !isDescendantOf(t.id, currentId))
+        .slice()
+        .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
+        .forEach(t => {
+          options.push(`<option value="${t.id}" ${t.id === selectedParentId ? "selected" : ""}>${escapeHtml(termPath(t))}</option>`);
+        });
+      return options.join("");
+    }
+
+    function relatedOptions(currentId) {
+      const current = getTerm(currentId);
+      const selected = new Set(current.relacionados || []);
+      const options = ['<option value="">Selecione um termo</option>'];
+      state.terms
+        .filter(t => t.id !== currentId && !selected.has(t.id))
+        .slice()
+        .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
+        .forEach(t => options.push(`<option value="${t.id}">${escapeHtml(termPath(t))}</option>`));
+      return options.join("");
+    }
+
+    function isDescendantOf(candidateId, possibleAncestorId) {
+      let current = getTerm(candidateId);
+      const guard = new Set();
+      while (current && current.parentId && !guard.has(current.id)) {
+        guard.add(current.id);
+        if (current.parentId === possibleAncestorId) return true;
+        current = getTerm(current.parentId);
+      }
+      return false;
+    }
+
+    function renderCommentHtml(c) {
+      const statusClass = c.resolved ? "resolved" : "open";
+      const statusLabel = c.resolved ? "resolvido" : "aberto";
+      const footer = c.resolved ? `<div class="muted">Resolvido por ${escapeHtml(c.resolvedBy || "")} em ${escapeHtml(c.resolvedAt || "")}</div>` : "";
+      return `
+        <div class="comment-box ${c.resolved ? "resolved" : ""}">
+          <div class="comment-head">
+            <div><strong>${escapeHtml(c.author)}</strong> <span class="muted">· ${escapeHtml(c.createdAt)}</span></div>
+            <span class="status-pill ${statusClass}">${statusLabel}</span>
+          </div>
+          <div>${escapeHtml(c.text).replace(/\n/g, "<br>")}</div>
+          ${footer}
+          <div class="toolbar">
+            ${c.resolved
+              ? `<button data-comment-action="reopen" data-comment-id="${c.id}">Reabrir</button>`
+              : `<button class="success" data-comment-action="resolve" data-comment-id="${c.id}">Resolver</button>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function wireTermArea(term) {
+      document.querySelectorAll(".tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+          document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+          tab.classList.add("active");
+          document.getElementById(tab.dataset.tab).classList.add("active");
+        });
+      });
+
+      const saveBtn = document.getElementById("saveTermBtn");
+      if (saveBtn) {
+        saveBtn.onclick = () => {
+          term.termo = document.getElementById("editTermo").value.trim() || term.termo;
+          term.definicao = document.getElementById("editDefinicao").value.trim();
+          term.notaEscopo = document.getElementById("editNotaEscopo").value.trim();
+          term.notaUso = document.getElementById("editNotaUso").value.trim();
+          term.status = document.getElementById("editStatus").value;
+          term.parentId = document.getElementById("editParent").value || null;
+          saveState();
+          render();
+        };
+      }
+
+      const deleteBtn = document.getElementById("deleteTermBtn");
+      if (deleteBtn) {
+        deleteBtn.onclick = () => {
+          if (childrenOf(term.id).length) {
+            alert("Não é possível excluir termo com termos específicos. Mova ou exclua os filhos primeiro.");
+            return;
+          }
+          if (!confirm(`Excluir o termo "${term.termo}"?`)) return;
+          state.terms = state.terms.filter(t => t.id !== term.id);
+          state.comments = state.comments.filter(c => c.termId !== term.id);
+          state.terms.forEach(t => {
+            t.relacionados = (t.relacionados || []).filter(id => id !== term.id);
+          });
+          state.selectedId = state.terms[0]?.id || null;
+          saveState();
+          render();
+        };
+      }
+
+      const addRelatedBtn = document.getElementById("addRelatedBtn");
+      if (addRelatedBtn) {
+        addRelatedBtn.onclick = () => {
+          const relatedId = document.getElementById("addRelatedSelect").value;
+          if (!relatedId) return;
+          term.relacionados = term.relacionados || [];
+          if (!term.relacionados.includes(relatedId)) term.relacionados.push(relatedId);
+          const other = getTerm(relatedId);
+          other.relacionados = other.relacionados || [];
+          if (!other.relacionados.includes(term.id)) other.relacionados.push(term.id);
+          saveState();
+          render();
+        };
+      }
+
+      const addCommentBtn = document.getElementById("addCommentBtn");
+      if (addCommentBtn) {
+        addCommentBtn.onclick = () => {
+          const text = document.getElementById("newCommentText").value.trim();
+          if (!text) return;
+          state.comments.push({
+            id: uid("comment"),
+            termId: term.id,
+            author: currentUser.value.trim() || "Usuário",
+            text,
+            createdAt: nowLabel(),
+            resolved: false,
+            resolvedBy: null,
+            resolvedAt: null
+          });
+          saveState();
+          render();
+          setActiveTab("comentarios");
+        };
+      }
+
+      document.querySelectorAll("[data-comment-action]").forEach(btn => {
+        btn.onclick = () => {
+          const comment = state.comments.find(c => c.id === btn.dataset.commentId);
+          if (!comment) return;
+          if (btn.dataset.commentAction === "resolve") {
+            comment.resolved = true;
+            comment.resolvedBy = currentUser.value.trim() || "Usuário";
+            comment.resolvedAt = nowLabel();
+          } else {
+            comment.resolved = false;
+            comment.resolvedBy = null;
+            comment.resolvedAt = null;
+          }
+          saveState();
+          render();
+          setActiveTab("comentarios");
+        };
+      });
+    }
+
+    function setActiveTab(tabId) {
+      document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tabId));
+      document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === tabId));
+    }
+
+    function addTerm() {
+      state = normalizeState(state);
+      const value = newTerm.value.trim();
+      if (!value) {
+        alert("Informe o termo.");
+        return;
+      }
+      const parentId = newParent.value || null;
+      const id = uid("term");
+      state.terms.push({
+        id,
+        parentId,
+        termo: value,
+        status: "candidato",
+        definicao: "",
+        notaEscopo: "",
+        notaUso: "",
+        relacionados: []
+      });
+      if (parentId && !state.expanded.includes(parentId)) state.expanded.push(parentId);
+      state.selectedId = id;
+      newTerm.value = "";
+      saveState();
+      render();
+    }
+
+    function exportJson() {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tesauro-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function importJson(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const imported = JSON.parse(reader.result);
+          if (!Array.isArray(imported.terms) || !Array.isArray(imported.comments)) {
+            throw new Error("Arquivo inválido");
+          }
+          state = imported;
+          saveState();
+          render();
+        } catch (e) {
+          alert("Não foi possível importar o JSON.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+
+    function render() {
+      state = normalizeState(state);
+      renderTree();
+      renderParentOptions();
+      renderTermArea();
+    }
+
+    searchInput.addEventListener("input", renderTree);
+    clearSearchBtn.addEventListener("click", () => {
+      searchInput.value = "";
+      renderTree();
+    });
+    addTermBtn.addEventListener("click", addTerm);
+    newTerm.addEventListener("keydown", e => {
+      if (e.key === "Enter") addTerm();
+    });
+    exportBtn.addEventListener("click", exportJson);
+    importBtn.addEventListener("click", () => importFile.click());
+    importFile.addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (file) importJson(file);
+      importFile.value = "";
+    });
+    resetBtn.addEventListener("click", () => {
+      if (!confirm("Restaurar os dados de exemplo? Isso apaga os dados salvos neste navegador.")) return;
+      state = structuredClone(exemplo);
+      saveState();
+      render();
+    });
+
+    async function iniciarApp() {
+      state = await loadState();
+      state = normalizeState(state);
+      await saveState();
+      render();
+    }
+
+    iniciarApp();
+  </script>
+</body>
+</html>
