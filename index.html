@@ -365,7 +365,7 @@
     // CONFIGURAÇÃO DA API DO THESAURUS DA ALMG
     // ============================================================
     const ALMG_THESAURUS_URL = "https://dadosabertosd.almg.gov.br/api/v2/thesaurus/termos/lista";
-    const ALMG_PAGE_SIZE = 100;
+    const ALMG_PAGE_SIZE = 1000;
     const ALMG_DELAY_MS = 1100;
 
     const exemplo = {
@@ -1253,17 +1253,17 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
       while (true) {
         const url = `${ALMG_THESAURUS_URL}?p=${pagina}&tp=${ALMG_PAGE_SIZE}`;
-        setStatus(`Importando página ${pagina}...`);
+        setStatus(`Importando página ${pagina} com ${ALMG_PAGE_SIZE} registros por página...`);
 
         const response = await fetch(url, {
           headers: { "Accept": "application/xml,text/xml,*/*" }
         });
 
         // A API pode devolver 400 quando a página solicitada não existe.
-        // Se já importamos páginas anteriores, isso significa fim da paginação.
+        // Se isso acontecer depois de já termos importado algo, tratamos como fim.
         if (response.status === 400 || response.status === 404) {
           if (allAuthorized.length > 0 || allPathTerms.length > 0) {
-            setStatus(`Fim da importação na página ${pagina - 1}.`);
+            setStatus(`Fim da importação. Última página válida: ${pagina - 1}.`);
             break;
           }
 
@@ -1284,25 +1284,31 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           `Página ${pagina} importada. Termos autorizados até agora: ${allAuthorized.length}.`
         );
 
-        // Se a página não trouxe nenhum elemento de termo, acabou.
+        // Se não veio nenhum termo, acabou.
         if (parsed.totalTermElements === 0) {
           break;
         }
 
-        // Se trouxe menos que o tamanho da página, provavelmente acabou.
+        // Se veio menos que o tamanho da página, provavelmente era a última página.
         if (parsed.totalTermElements < ALMG_PAGE_SIZE) {
           break;
         }
 
         pagina += 1;
-
-        // Evita chamadas rápidas demais à API.
         await sleep(ALMG_DELAY_MS);
       }
 
+      setStatus(`Finalizando importação. Total de termos autorizados encontrados: ${allAuthorized.length}.`);
+
       const merged = mergeTermsById(allPathTerms.concat(allAuthorized));
-      return corrigirPaisInexistentes(merged);
-    }
+      const corrigidos = corrigirPaisInexistentes(merged);
+
+      setStatus(
+        `Importação finalizada. Autorizados encontrados: ${allAuthorized.length}. Termos na árvore: ${corrigidos.length}.`
+      );
+
+      return corrigidos;
+}
     async function importarThesaurusAlmg() {
       if (!confirm("Importar termos autorizados do Thesaurus da ALMG? Isso substituirá os dados atuais do protótipo.")) {
         return;
