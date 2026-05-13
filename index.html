@@ -1024,16 +1024,10 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
     // Busca todas as páginas e filtra apenas <autorizado>true</autorizado>.
     // ============================================================
     function sameName(localName, names) {
-      const normalized = String(localName || "")
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .toLowerCase();
+      const normalized = String(localName || "").toLowerCase();
 
       return names.some(name => {
-        const n = String(name)
-          .normalize("NFD")
-          .replace(/[̀-ͯ]/g, "")
-          .toLowerCase();
+        const n = String(name || "").toLowerCase();
         return normalized === n;
       });
     }
@@ -1070,8 +1064,24 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
     function makeSafeId(value) {
       const raw = String(value || "").trim();
-      if (!raw) return uid("almg");
-      return `almg-${raw.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+
+      if (!raw) {
+        return uid("almg");
+      }
+
+      let safe = "";
+
+      for (const char of raw) {
+        const code = char.charCodeAt(0);
+        const isNumber = code >= 48 && code <= 57;
+        const isUpper = code >= 65 && code <= 90;
+        const isLower = code >= 97 && code <= 122;
+        const isAllowed = isNumber || isUpper || isLower || char === "_" || char === "-";
+
+        safe += isAllowed ? char : "-";
+      }
+
+      return `almg-${safe}`;
     }
 
     function getTermParentIdFromXml(element) {
