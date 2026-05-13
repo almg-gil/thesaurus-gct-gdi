@@ -1,602 +1,761 @@
-# app.py
-# Sistema simples de vocabulário controlado em Streamlit.
-# Permite cadastrar termos, criar hierarquias, registrar notas, comentários,
-# termos relacionados e exportar/importar CSV.
-
 from __future__ import annotations
 
-import os
-import sqlite3
-from datetime import datetime
-from pathlib import Path
-from typing import Optional
+import base64
+import copy
+import csv
+import html
+import io
+import json
+import uuid
+from datetime import datetime, timezone
+from typing import Any
 
-import pandas as pd
+import requests
 import streamlit as st
 
-DB_PATH = Path(os.getenv("VOCAB_DB_PATH", "vocabulario.db"))
+
+APP_TITLE = "Vocabulário controlado"
 STATUS = ["Ativo", "Em revisão", "Substituído", "Inativo"]
+DEFAULT_DATA = {"schema_version": 1, "terms": []}
 
 
-# ---------------------------------------------------------------------
-# Banco de dados
-# ---------------------------------------------------------------------
-
-def now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+# -----------------------------------------------------------------------------
+# Configuração e acesso ao GitHub
+# -----------------------------------------------------------------------------
 
 
-def conn() -> sqlite3.Connection:
-    c = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
-    c.row_factory = sqlite3.Row
-    c.execute("PRAGMA foreign_keys = ON")
-    c.execute("PRAGMA journal_mode = WAL")
-    c.execute("PRAGMA busy_timeout = 30000")
-    return c
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def init_db() -> None:
-    with conn() as c:
-        c.executescript(
+def get_secret(name: str, default: str = "") -> str:
+    """Lê segredo do Streamlit Cloud sem quebrar quando ele ainda não existe."""
+    try:
+        value = st.secrets.get(name, default)
+        if value is None:
+            return default
+        return str(value)
+    except Exception:
+        return default
+
+
+def github_config() -> dict[str, str]:
+    return {
+        "token": get_secret("GITHUB_TOKEN"),
+        "repo": get_secret("GITHUB_REPO"),  # formato: usuario-ou-org/nome-do-repositorio
+        "branch": get_secret("GITHUB_BRANCH", "main"),
+        "path": get_secret("DATA_PATH", "data/vocabulario.json"),
+    }
+
+
+def github_headers(token: str) -> dict[str, str]:
+    return {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def ensure_github_config_or_stop() -> dict[str, str]:
+    cfg = github_config()
+    missing = [k for k in ["GITHUB_TOKEN", "GITHUB_REPO"] if not get_secret(k)]
+    if missing:
+        st.error("Faltam configurações em Secrets do Streamlit Cloud.")
+        st.markdown(
             """
-            CREATE TABLE IF NOT EXISTS terms (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                term TEXT NOT NULL UNIQUE,
-                parent_id INTEGER,
-                status TEXT NOT NULL DEFAULT 'Ativo',
-                scope_note TEXT DEFAULT '',
-                history_note TEXT DEFAULT '',
-                editorial_note TEXT DEFAULT '',
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY(parent_id) REFERENCES terms(id) ON DELETE SET NULL
-            );
+            Cadastre estes valores em **App settings > Secrets** no Streamlit Cloud:
 
-            CREATE TABLE IF NOT EXISTS related_terms (
-                term_id INTEGER NOT NULL,
-                related_id INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                PRIMARY KEY(term_id, related_id),
-                CHECK(term_id <> related_id),
-                FOREIGN KEY(term_id) REFERENCES terms(id) ON DELETE CASCADE,
-                FOREIGN KEY(related_id) REFERENCES terms(id) ON DELETE CASCADE
-            );
+            ```toml
+            GITHUB_TOKEN = "cole_aqui_o_token_do_github"
+            GITHUB_REPO = "usuario-ou-org/nome-do-repositorio"
+            GITHUB_BRANCH = "main"
+            DATA_PATH = "data/vocabulario.json"
+            ```
 
-            CREATE TABLE IF NOT EXISTS comments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                term_id INTEGER NOT NULL,
-                author TEXT DEFAULT '',
-                comment TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY(term_id) REFERENCES terms(id) ON DELETE CASCADE
-            );
+            O token do GitHub precisa ter permissão de **Contents: Read and write** no repositório.
             """
+        )
+        st.stop()
+    return cfg
+
+
+def github_content_url(cfg: dict[str, str]) -> str:
+    return f"https://api.github.com/repos/{cfg['repo']}/contents/{cfg['path']}"
+
+
+def load_data_from_github(cfg: dict[str, str]) -> tuple[dict[str, Any], str | None]:
+    """Retorna (dados, sha_do_arquivo). Se o arquivo ainda não existe, retorna dados vazios."""
+    url = github_content_url(cfg)
+    params = {"ref": cfg["branch"]}
+    response = requests.get(url, headers=github_headers(cfg["token"]), params=params, timeout=30)
+
+    if response.status_code == 404:
+        return copy.deepcopy(DEFAULT_DATA), None
+
+    if not response.ok:
+        raise RuntimeError(
+            f"Não foi possível ler o arquivo no GitHub. Código {response.status_code}: {response.text[:500]}"
+        )
+
+    payload = response.json()
+    encoded = payload.get("content", "")
+    sha = payload.get("sha")
+
+    try:
+        raw = base64.b64decode(encoded).decode("utf-8")
+        data = json.loads(raw)
+    except Exception as exc:
+        raise RuntimeError("O arquivo JSON do vocabulário existe, mas não pôde ser lido.") from exc
+
+    if "terms" not in data or not isinstance(data["terms"], list):
+        raise RuntimeError("O arquivo JSON não tem o formato esperado: campo 'terms' ausente ou inválido.")
+
+    return data, sha
+
+
+def save_data_to_github(
+    cfg: dict[str, str],
+    data: dict[str, Any],
+    sha: str | None,
+    message: str,
+) -> None:
+    """Cria ou atualiza o arquivo JSON no GitHub."""
+    url = github_content_url(cfg)
+    content = json.dumps(data, ensure_ascii=False, indent=2)
+    encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+
+    body: dict[str, Any] = {
+        "message": message,
+        "content": encoded,
+        "branch": cfg["branch"],
+    }
+    if sha:
+        body["sha"] = sha
+
+    response = requests.put(url, headers=github_headers(cfg["token"]), json=body, timeout=30)
+
+    if response.status_code == 409:
+        raise RuntimeError(
+            "Conflito ao salvar: outra pessoa alterou o vocabulário ao mesmo tempo. "
+            "Recarregue a página e tente salvar novamente."
+        )
+
+    if not response.ok:
+        raise RuntimeError(
+            f"Não foi possível salvar no GitHub. Código {response.status_code}: {response.text[:700]}"
         )
 
 
-def terms_df() -> pd.DataFrame:
-    with conn() as c:
-        return pd.read_sql_query(
-            """
-            SELECT
-                t.id,
-                t.term,
-                t.parent_id,
-                p.term AS parent_term,
-                t.status,
-                t.scope_note,
-                t.history_note,
-                t.editorial_note,
-                t.created_at,
-                t.updated_at
-            FROM terms t
-            LEFT JOIN terms p ON p.id = t.parent_id
-            ORDER BY lower(t.term)
-            """,
-            c,
-        )
+# -----------------------------------------------------------------------------
+# Funções de dados
+# -----------------------------------------------------------------------------
 
 
-def fetch_term(term_id: int) -> sqlite3.Row | None:
-    with conn() as c:
-        return c.execute("SELECT * FROM terms WHERE id = ?", (term_id,)).fetchone()
+def normalize_text(value: str) -> str:
+    return " ".join((value or "").strip().split())
 
 
-def related_ids(term_id: int) -> list[int]:
-    with conn() as c:
-        rows = c.execute(
-            "SELECT related_id FROM related_terms WHERE term_id = ?",
-            (term_id,),
-        ).fetchall()
-    return [int(r["related_id"]) for r in rows]
+def sorted_terms(data: dict[str, Any]) -> list[dict[str, Any]]:
+    return sorted(data.get("terms", []), key=lambda item: item.get("term", "").casefold())
 
 
-def comments_df(term_id: int) -> pd.DataFrame:
-    with conn() as c:
-        return pd.read_sql_query(
-            """
-            SELECT author, comment, created_at
-            FROM comments
-            WHERE term_id = ?
-            ORDER BY created_at DESC, id DESC
-            """,
-            c,
-            params=(term_id,),
-        )
+def get_term(data: dict[str, Any], term_id: str | None) -> dict[str, Any] | None:
+    if not term_id:
+        return None
+    for term in data.get("terms", []):
+        if term.get("id") == term_id:
+            return term
+    return None
 
 
-# ---------------------------------------------------------------------
-# Regras
-# ---------------------------------------------------------------------
-
-def name_exists(term: str, current_id: Optional[int] = None) -> bool:
-    sql = "SELECT id FROM terms WHERE lower(term) = lower(?)"
-    params: tuple = (term.strip(),)
-    if current_id is not None:
-        sql += " AND id <> ?"
-        params = (term.strip(), current_id)
-    with conn() as c:
-        return c.execute(sql, params).fetchone() is not None
+def term_label(term: dict[str, Any]) -> str:
+    return term.get("term", "Sem termo")
 
 
-def creates_cycle(term_id: int, parent_id: Optional[int]) -> bool:
-    """Evita que um termo vire pai de si mesmo ou de um ancestral."""
-    if parent_id is None:
-        return False
-    current = parent_id
-    seen: set[int] = set()
-    with conn() as c:
-        while current is not None:
-            if current == term_id or current in seen:
-                return True
-            seen.add(current)
-            row = c.execute("SELECT parent_id FROM terms WHERE id = ?", (current,)).fetchone()
-            current = None if row is None else row["parent_id"]
+def term_label_with_status(term: dict[str, Any]) -> str:
+    status = term.get("status") or "Ativo"
+    return f"{term_label(term)} [{status}]"
+
+
+def term_name_by_id(data: dict[str, Any], term_id: str | None) -> str:
+    term = get_term(data, term_id)
+    return term_label(term) if term else ""
+
+
+def label_to_id_map(data: dict[str, Any], include_empty: bool = True, exclude_id: str | None = None) -> dict[str, str | None]:
+    items: dict[str, str | None] = {}
+    if include_empty:
+        items["— sem termo pai —"] = None
+    for term in sorted_terms(data):
+        if exclude_id and term.get("id") == exclude_id:
+            continue
+        label = term_label_with_status(term)
+        items[label] = term.get("id")
+    return items
+
+
+def children_of(data: dict[str, Any], parent_id: str | None) -> list[dict[str, Any]]:
+    return sorted(
+        [term for term in data.get("terms", []) if term.get("parent_id") == parent_id],
+        key=lambda item: item.get("term", "").casefold(),
+    )
+
+
+def is_descendant(data: dict[str, Any], possible_child_id: str | None, possible_parent_id: str | None) -> bool:
+    """Verifica se possible_child_id está abaixo de possible_parent_id na árvore."""
+    current = possible_child_id
+    seen: set[str] = set()
+    while current:
+        if current == possible_parent_id:
+            return True
+        if current in seen:
+            return False
+        seen.add(current)
+        term = get_term(data, current)
+        current = term.get("parent_id") if term else None
     return False
 
 
-def save_related(c: sqlite3.Connection, term_id: int, ids: list[int]) -> None:
-    old = c.execute(
-        "SELECT related_id FROM related_terms WHERE term_id = ?",
-        (term_id,),
-    ).fetchall()
-    for row in old:
-        old_id = int(row["related_id"])
-        c.execute(
-            """
-            DELETE FROM related_terms
-            WHERE (term_id = ? AND related_id = ?)
-               OR (term_id = ? AND related_id = ?)
-            """,
-            (term_id, old_id, old_id, term_id),
-        )
-
-    for rid in ids:
-        if rid == term_id:
+def duplicate_term_exists(data: dict[str, Any], term_text: str, ignore_id: str | None = None) -> bool:
+    normalized = normalize_text(term_text).casefold()
+    for term in data.get("terms", []):
+        if ignore_id and term.get("id") == ignore_id:
             continue
-        c.execute(
-            "INSERT OR IGNORE INTO related_terms VALUES (?, ?, ?)",
-            (term_id, rid, now()),
-        )
-        c.execute(
-            "INSERT OR IGNORE INTO related_terms VALUES (?, ?, ?)",
-            (rid, term_id, now()),
-        )
+        if normalize_text(term.get("term", "")).casefold() == normalized:
+            return True
+    return False
 
 
-def create_term(
-    term: str,
-    parent_id: Optional[int],
+def upsert_term(
+    data: dict[str, Any],
+    *,
+    term_id: str | None,
+    term_text: str,
+    parent_id: str | None,
     status: str,
     scope_note: str,
     history_note: str,
-    editorial_note: str,
-    rel_ids: list[int],
-) -> None:
-    term = term.strip()
-    if not term:
+    editorial_comment: str,
+    related_ids: list[str],
+    user_name: str,
+) -> str:
+    term_text = normalize_text(term_text)
+    if not term_text:
         raise ValueError("Informe o termo.")
-    if name_exists(term):
+
+    if duplicate_term_exists(data, term_text, ignore_id=term_id):
         raise ValueError("Já existe um termo com esse nome.")
 
-    with conn() as c:
-        ts = now()
-        cur = c.execute(
-            """
-            INSERT INTO terms
-            (term, parent_id, status, scope_note, history_note, editorial_note, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (term, parent_id, status, scope_note, history_note, editorial_note, ts, ts),
+    if term_id and parent_id == term_id:
+        raise ValueError("Um termo não pode ser pai dele mesmo.")
+
+    if term_id and parent_id and is_descendant(data, parent_id, term_id):
+        raise ValueError("Essa hierarquia criaria um ciclo. Escolha outro termo pai.")
+
+    clean_related = []
+    for rid in related_ids:
+        if rid and rid != term_id and rid not in clean_related:
+            clean_related.append(rid)
+
+    timestamp = now_iso()
+    existing = get_term(data, term_id)
+
+    if existing:
+        existing.update(
+            {
+                "term": term_text,
+                "parent_id": parent_id,
+                "status": status,
+                "scope_note": scope_note.strip(),
+                "history_note": history_note.strip(),
+                "editorial_comment": editorial_comment.strip(),
+                "related_ids": clean_related,
+                "updated_at": timestamp,
+                "updated_by": user_name.strip(),
+            }
         )
-        save_related(c, int(cur.lastrowid), rel_ids)
-        c.commit()
+        return existing["id"]
+
+    new_id = str(uuid.uuid4())
+    data.setdefault("terms", []).append(
+        {
+            "id": new_id,
+            "term": term_text,
+            "parent_id": parent_id,
+            "status": status,
+            "scope_note": scope_note.strip(),
+            "history_note": history_note.strip(),
+            "editorial_comment": editorial_comment.strip(),
+            "related_ids": clean_related,
+            "comments": [],
+            "created_at": timestamp,
+            "created_by": user_name.strip(),
+            "updated_at": timestamp,
+            "updated_by": user_name.strip(),
+        }
+    )
+    return new_id
 
 
-def update_term(
-    term_id: int,
-    term: str,
-    parent_id: Optional[int],
-    status: str,
-    scope_note: str,
-    history_note: str,
-    editorial_note: str,
-    rel_ids: list[int],
-) -> None:
-    term = term.strip()
+def delete_term(data: dict[str, Any], term_id: str) -> None:
+    if children_of(data, term_id):
+        raise ValueError("Não é possível excluir um termo que possui termos filhos.")
+
+    data["terms"] = [term for term in data.get("terms", []) if term.get("id") != term_id]
+    for term in data.get("terms", []):
+        if term.get("parent_id") == term_id:
+            term["parent_id"] = None
+        term["related_ids"] = [rid for rid in term.get("related_ids", []) if rid != term_id]
+
+
+def add_comment(data: dict[str, Any], term_id: str, author: str, text: str) -> None:
+    term = get_term(data, term_id)
     if not term:
-        raise ValueError("Informe o termo.")
-    if name_exists(term, current_id=term_id):
-        raise ValueError("Já existe outro termo com esse nome.")
-    if parent_id == term_id or creates_cycle(term_id, parent_id):
-        raise ValueError("A hierarquia ficaria circular. Escolha outro termo pai.")
-
-    with conn() as c:
-        c.execute(
-            """
-            UPDATE terms
-            SET term = ?, parent_id = ?, status = ?, scope_note = ?,
-                history_note = ?, editorial_note = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (term, parent_id, status, scope_note, history_note, editorial_note, now(), term_id),
-        )
-        save_related(c, term_id, rel_ids)
-        c.commit()
-
-
-def delete_term(term_id: int) -> None:
-    with conn() as c:
-        c.execute("DELETE FROM terms WHERE id = ?", (term_id,))
-        c.commit()
-
-
-def add_comment(term_id: int, author: str, comment: str) -> None:
-    if not comment.strip():
+        raise ValueError("Termo não encontrado.")
+    text = text.strip()
+    if not text:
         raise ValueError("Digite o comentário.")
-    with conn() as c:
-        c.execute(
-            "INSERT INTO comments (term_id, author, comment, created_at) VALUES (?, ?, ?, ?)",
-            (term_id, author.strip(), comment.strip(), now()),
+    term.setdefault("comments", []).append(
+        {
+            "id": str(uuid.uuid4()),
+            "author": author.strip() or "Sem identificação",
+            "text": text,
+            "created_at": now_iso(),
+        }
+    )
+    term["updated_at"] = now_iso()
+    term["updated_by"] = author.strip()
+
+
+def path_for_term(data: dict[str, Any], term_id: str) -> str:
+    parts = []
+    current = term_id
+    seen: set[str] = set()
+    while current and current not in seen:
+        seen.add(current)
+        term = get_term(data, current)
+        if not term:
+            break
+        parts.append(term_label(term))
+        current = term.get("parent_id")
+    return " > ".join(reversed(parts))
+
+
+# -----------------------------------------------------------------------------
+# Exportação/importação
+# -----------------------------------------------------------------------------
+
+
+def data_to_csv(data: dict[str, Any]) -> str:
+    output = io.StringIO()
+    fieldnames = [
+        "termo",
+        "termo_pai",
+        "situacao",
+        "nota_explicativa",
+        "nota_historica",
+        "comentario_editorial",
+        "termos_relacionados",
+        "criado_em",
+        "atualizado_em",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for term in sorted_terms(data):
+        related_names = [term_name_by_id(data, rid) for rid in term.get("related_ids", [])]
+        writer.writerow(
+            {
+                "termo": term.get("term", ""),
+                "termo_pai": term_name_by_id(data, term.get("parent_id")),
+                "situacao": term.get("status", "Ativo"),
+                "nota_explicativa": term.get("scope_note", ""),
+                "nota_historica": term.get("history_note", ""),
+                "comentario_editorial": term.get("editorial_comment", ""),
+                "termos_relacionados": "; ".join([name for name in related_names if name]),
+                "criado_em": term.get("created_at", ""),
+                "atualizado_em": term.get("updated_at", ""),
+            }
         )
-        c.commit()
+
+    return output.getvalue()
 
 
-# ---------------------------------------------------------------------
-# Interface: helpers
-# ---------------------------------------------------------------------
+def import_csv_into_data(data: dict[str, Any], csv_text: str, user_name: str) -> int:
+    reader = csv.DictReader(io.StringIO(csv_text))
+    rows = list(reader)
+    if not rows:
+        return 0
 
-def option_map(df: pd.DataFrame, *, include_empty=True, exclude_id: Optional[int] = None) -> dict[str, Optional[int]]:
-    opts: dict[str, Optional[int]] = {}
-    if include_empty:
-        opts["— Sem termo pai —"] = None
-    for r in df.itertuples(index=False):
-        if exclude_id is not None and int(r.id) == exclude_id:
-            continue
-        opts[str(r.term)] = int(r.id)
-    return opts
+    required = {"termo"}
+    if not required.issubset(set(reader.fieldnames or [])):
+        raise ValueError("O CSV precisa ter pelo menos a coluna 'termo'.")
 
-
-def render_tree(df: pd.DataFrame, parent_id: Optional[int] = None, level: int = 0) -> None:
-    if df.empty and level == 0:
-        st.info("Nenhum termo cadastrado ainda.")
-        return
-    children = df[df["parent_id"].isna()] if parent_id is None else df[df["parent_id"] == parent_id]
-    children = children.sort_values("term", key=lambda s: s.str.lower())
-    for _, row in children.iterrows():
-        indent = "&nbsp;" * 4 * level
-        status = "" if row["status"] == "Ativo" else f" <small>({row['status']})</small>"
-        st.markdown(f"{indent}- **{row['term']}**{status}", unsafe_allow_html=True)
-        render_tree(df, int(row["id"]), level + 1)
-
-
-def export_df(df: pd.DataFrame) -> pd.DataFrame:
-    cols = {
-        "term": "termo",
-        "parent_term": "termo_pai",
-        "status": "situacao",
-        "scope_note": "nota_explicativa",
-        "history_note": "nota_historica",
-        "editorial_note": "comentario_editorial",
-        "created_at": "criado_em",
-        "updated_at": "atualizado_em",
+    # Primeiro cria/atualiza os termos, sem hierarquia.
+    name_to_id: dict[str, str] = {
+        normalize_text(term.get("term", "")).casefold(): term.get("id", "") for term in data.get("terms", [])
     }
-    if df.empty:
-        return pd.DataFrame(columns=cols.values())
-    return df[list(cols)].rename(columns=cols)
 
-
-def import_terms(upload) -> tuple[int, int]:
-    data = pd.read_csv(upload).fillna("")
-    data.columns = [c.strip().lower() for c in data.columns]
-    if "termo" not in data.columns:
-        raise ValueError("O CSV precisa ter uma coluna chamada 'termo'.")
-
-    created = updated = 0
-
-    # Primeiro cria/atualiza termos sem aplicar hierarquia.
-    for _, row in data.iterrows():
-        termo = str(row.get("termo", "")).strip()
-        if not termo:
+    imported = 0
+    for row in rows:
+        term_text = normalize_text(row.get("termo", ""))
+        if not term_text:
             continue
-        situacao = str(row.get("situacao", "Ativo")).strip() or "Ativo"
-        if situacao not in STATUS:
-            situacao = "Ativo"
-        scope = str(row.get("nota_explicativa", ""))
-        hist = str(row.get("nota_historica", ""))
-        edit = str(row.get("comentario_editorial", ""))
+        key = term_text.casefold()
+        existing_id = name_to_id.get(key)
+        new_id = upsert_term(
+            data,
+            term_id=existing_id,
+            term_text=term_text,
+            parent_id=None,
+            status=row.get("situacao") or "Ativo",
+            scope_note=row.get("nota_explicativa") or row.get("nota_escopo") or "",
+            history_note=row.get("nota_historica") or "",
+            editorial_comment=row.get("comentario_editorial") or "",
+            related_ids=[],
+            user_name=user_name,
+        )
+        name_to_id[key] = new_id
+        imported += 1
 
-        df = terms_df()
-        found = df[df["term"].str.lower() == termo.lower()]
-        if found.empty:
-            create_term(termo, None, situacao, scope, hist, edit, [])
-            created += 1
-        else:
-            tid = int(found.iloc[0]["id"])
-            current = fetch_term(tid)
-            update_term(tid, termo, current["parent_id"], situacao, scope, hist, edit, related_ids(tid))
-            updated += 1
-
-    # Depois aplica termo pai.
-    df = terms_df()
-    ids = {r.term.lower(): int(r.id) for r in df.itertuples(index=False)}
-    for _, row in data.iterrows():
-        termo = str(row.get("termo", "")).strip().lower()
-        pai = str(row.get("termo_pai", "")).strip().lower()
-        if not termo or not pai or termo not in ids or pai not in ids:
+    # Depois resolve pais e relacionados.
+    for row in rows:
+        term_text = normalize_text(row.get("termo", ""))
+        if not term_text:
             continue
-        tid, pid = ids[termo], ids[pai]
-        current = fetch_term(tid)
-        if current and tid != pid and not creates_cycle(tid, pid):
-            update_term(
-                tid,
-                current["term"],
-                pid,
-                current["status"],
-                current["scope_note"],
-                current["history_note"],
-                current["editorial_note"],
-                related_ids(tid),
-            )
-    return created, updated
+        term_id = name_to_id.get(term_text.casefold())
+        term = get_term(data, term_id)
+        if not term:
+            continue
+
+        parent_name = normalize_text(row.get("termo_pai", ""))
+        parent_id = name_to_id.get(parent_name.casefold()) if parent_name else None
+        if parent_id and parent_id != term_id and not is_descendant(data, parent_id, term_id):
+            term["parent_id"] = parent_id
+
+        related_raw = row.get("termos_relacionados", "") or ""
+        related_ids = []
+        for piece in related_raw.split(";"):
+            related_name = normalize_text(piece)
+            rid = name_to_id.get(related_name.casefold())
+            if rid and rid != term_id and rid not in related_ids:
+                related_ids.append(rid)
+        term["related_ids"] = related_ids
+        term["updated_at"] = now_iso()
+        term["updated_by"] = user_name.strip()
+
+    return imported
 
 
-# ---------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Interface Streamlit
+# -----------------------------------------------------------------------------
 
-st.set_page_config(page_title="Vocabulário controlado", page_icon="📚", layout="wide")
-init_db()
-df = terms_df()
 
-st.title("📚 Vocabulário controlado")
-st.caption("Cadastro online simples de termos, hierarquias, notas e comentários.")
+def render_tree(data: dict[str, Any], parent_id: str | None = None, level: int = 0) -> None:
+    for term in children_of(data, parent_id):
+        prefix = "&nbsp;" * (level * 4)
+        status = html.escape(term.get("status", "Ativo"))
+        st.markdown(f"{prefix}- **{html.escape(term_label(term))}** <small>({status})</small>", unsafe_allow_html=True)
+        render_tree(data, term.get("id"), level + 1)
 
-with st.sidebar:
-    st.subheader("Como entrar com os termos")
-    st.markdown(
-        """
-        1. Entre na aba **Cadastrar termo**.  
-        2. Digite o **termo**.  
-        3. Escolha o **termo pai**, se houver.  
-        4. Preencha as notas.  
-        5. Clique em **Salvar termo**.
-        """
-    )
-    st.divider()
-    st.write(f"Banco: `{DB_PATH}`")
-    st.write(f"Total de termos: **{len(df)}**")
 
-abas = st.tabs(["Cadastrar termo", "Consultar", "Editar/excluir", "Hierarquia", "Comentários", "Importar/exportar"])
+def render_term_card(data: dict[str, Any], term: dict[str, Any]) -> None:
+    st.markdown(f"### {html.escape(term_label(term))}")
+    st.caption(path_for_term(data, term.get("id")))
 
-# Cadastrar
-with abas[0]:
-    st.header("Cadastrar novo termo")
-    pais = option_map(df)
-    relacionados = option_map(df, include_empty=False)
-    with st.form("novo_termo", clear_on_submit=True):
-        termo = st.text_input("Termo *", placeholder="Ex.: Processo legislativo")
-        pai_label = st.selectbox("Termo pai", list(pais))
-        situacao = st.selectbox("Situação", STATUS)
-        nota = st.text_area("Nota explicativa / nota de escopo")
-        historico = st.text_area("Nota histórica")
-        comentario_editorial = st.text_area("Comentário editorial")
-        rel_labels = st.multiselect("Termos relacionados", list(relacionados))
-        salvar = st.form_submit_button("Salvar termo", type="primary")
+    cols = st.columns(3)
+    cols[0].metric("Situação", term.get("status", "Ativo"))
+    cols[1].metric("Filhos", str(len(children_of(data, term.get("id")))))
+    cols[2].metric("Comentários", str(len(term.get("comments", []))))
 
-    if salvar:
-        try:
-            create_term(
-                termo,
-                pais[pai_label],
-                situacao,
-                nota,
-                historico,
-                comentario_editorial,
-                [relacionados[x] for x in rel_labels if relacionados[x] is not None],
-            )
-            st.success("Termo salvo com sucesso.")
-            st.rerun()
-        except Exception as e:
-            st.error(str(e))
+    parent_name = term_name_by_id(data, term.get("parent_id")) or "—"
+    related = [term_name_by_id(data, rid) for rid in term.get("related_ids", [])]
+    related = [name for name in related if name]
 
-# Consultar
-with abas[1]:
-    st.header("Consultar termos")
-    busca = st.text_input("Buscar por termo, nota, histórico ou comentário")
-    filtrado = df.copy()
-    if busca.strip() and not filtrado.empty:
-        alvo = busca.strip().lower()
-        mask = False
-        for col in ["term", "parent_term", "scope_note", "history_note", "editorial_note", "status"]:
-            mask = mask | filtrado[col].fillna("").str.lower().str.contains(alvo, regex=False)
-        filtrado = filtrado[mask]
+    st.markdown(f"**Termo pai:** {html.escape(parent_name)}")
+    st.markdown(f"**Termos relacionados:** {html.escape('; '.join(related) if related else '—')}")
 
-    if filtrado.empty:
-        st.info("Nenhum termo encontrado.")
-    else:
-        view = export_df(filtrado)
-        st.dataframe(view, use_container_width=True, hide_index=True)
-
-        st.subheader("Ficha do termo")
-        escolhido = st.selectbox("Selecione um termo", filtrado["term"].tolist())
-        row = filtrado[filtrado["term"] == escolhido].iloc[0]
-        tid = int(row["id"])
-        st.markdown(f"**Termo:** {row['term']}")
-        st.markdown(f"**Termo pai:** {row['parent_term'] or '—'}")
-        st.markdown(f"**Situação:** {row['status']}")
-
-        rels = related_ids(tid)
-        nomes_rel = df[df["id"].isin(rels)]["term"].tolist()
-        st.markdown(f"**Termos relacionados:** {'; '.join(nomes_rel) if nomes_rel else '—'}")
-        st.markdown("**Nota explicativa / escopo**")
-        st.write(row["scope_note"] or "—")
+    if term.get("scope_note"):
+        st.markdown("**Nota explicativa / nota de escopo**")
+        st.write(term.get("scope_note"))
+    if term.get("history_note"):
         st.markdown("**Nota histórica**")
-        st.write(row["history_note"] or "—")
+        st.write(term.get("history_note"))
+    if term.get("editorial_comment"):
         st.markdown("**Comentário editorial**")
-        st.write(row["editorial_note"] or "—")
+        st.write(term.get("editorial_comment"))
 
-# Editar/excluir
-with abas[2]:
-    st.header("Editar ou excluir termo")
-    if df.empty:
-        st.info("Cadastre um termo primeiro.")
-    else:
-        escolhido = st.selectbox("Termo a editar", df["term"].tolist(), key="editar")
-        tid = int(df.loc[df["term"] == escolhido, "id"].iloc[0])
-        atual = fetch_term(tid)
-        pais = option_map(df, exclude_id=tid)
-        relacionados = option_map(df, include_empty=False, exclude_id=tid)
+    if term.get("comments"):
+        st.markdown("**Comentários**")
+        for comment in term.get("comments", []):
+            st.markdown(
+                f"- {html.escape(comment.get('text', ''))}  \n"
+                f"  <small>{html.escape(comment.get('author', ''))} — {html.escape(comment.get('created_at', ''))}</small>",
+                unsafe_allow_html=True,
+            )
 
-        pai_atual = "— Sem termo pai —"
-        if atual and atual["parent_id"]:
-            nome_pai = df.loc[df["id"] == atual["parent_id"], "term"]
-            if not nome_pai.empty:
-                pai_atual = nome_pai.iloc[0]
 
-        rel_atual = [nome for nome, rid in relacionados.items() if rid in related_ids(tid)]
+def main() -> None:
+    st.set_page_config(page_title=APP_TITLE, page_icon="📚", layout="wide")
+    st.title("📚 Vocabulário controlado")
+    st.caption("Cadastro colaborativo de termos, hierarquias, notas e comentários — com dados salvos no GitHub.")
 
-        with st.form("editar_termo"):
-            termo = st.text_input("Termo *", value=atual["term"])
-            pai_label = st.selectbox("Termo pai", list(pais), index=list(pais).index(pai_atual) if pai_atual in pais else 0)
-            situacao = st.selectbox("Situação", STATUS, index=STATUS.index(atual["status"]) if atual["status"] in STATUS else 0)
-            nota = st.text_area("Nota explicativa / nota de escopo", value=atual["scope_note"])
-            historico = st.text_area("Nota histórica", value=atual["history_note"])
-            comentario_editorial = st.text_area("Comentário editorial", value=atual["editorial_note"])
-            rel_labels = st.multiselect("Termos relacionados", list(relacionados), default=rel_atual)
-            salvar = st.form_submit_button("Salvar alterações", type="primary")
+    cfg = ensure_github_config_or_stop()
 
-        if salvar:
-            try:
-                update_term(
-                    tid,
-                    termo,
-                    pais[pai_label],
-                    situacao,
-                    nota,
-                    historico,
-                    comentario_editorial,
-                    [relacionados[x] for x in rel_labels if relacionados[x] is not None],
-                )
-                st.success("Termo atualizado.")
-                st.rerun()
-            except Exception as e:
-                st.error(str(e))
-
+    with st.sidebar:
+        st.header("Identificação")
+        user_name = st.text_input("Seu nome", value="Equipe", help="Será gravado no histórico dos termos e comentários.")
         st.divider()
-        st.subheader("Excluir")
-        st.warning("Ao excluir, os comentários e relações desse termo serão removidos. Termos filhos ficarão sem termo pai.")
-        confirma = st.checkbox("Confirmo que quero excluir este termo")
-        if st.button("Excluir termo", disabled=not confirma):
-            delete_term(tid)
-            st.success("Termo excluído.")
+        st.caption("Repositório")
+        st.code(cfg["repo"])
+        st.caption("Arquivo de dados")
+        st.code(cfg["path"])
+        if st.button("Recarregar dados"):
+            st.cache_data.clear()
             st.rerun()
 
-# Hierarquia
-with abas[3]:
-    st.header("Hierarquia")
-    st.write("A árvore abaixo é montada a partir do campo **Termo pai**.")
-    render_tree(df)
+    try:
+        data, sha = load_data_from_github(cfg)
+    except Exception as exc:
+        st.error(str(exc))
+        st.stop()
 
-# Comentários
-with abas[4]:
-    st.header("Comentários")
-    if df.empty:
-        st.info("Cadastre um termo primeiro.")
-    else:
-        escolhido = st.selectbox("Termo", df["term"].tolist(), key="comentarios")
-        tid = int(df.loc[df["term"] == escolhido, "id"].iloc[0])
-        with st.form("novo_comentario", clear_on_submit=True):
-            autor = st.text_input("Autor", placeholder="Ex.: Equipe GDI")
-            comentario = st.text_area("Comentário")
-            salvar_comentario = st.form_submit_button("Adicionar comentário", type="primary")
-        if salvar_comentario:
+    total = len(data.get("terms", []))
+    root_count = len(children_of(data, None))
+    st.info(f"Base carregada do GitHub: **{total} termo(s)**, com **{root_count} termo(s) raiz**.")
+
+    tab_register, tab_tree, tab_search, tab_comments, tab_import, tab_help = st.tabs(
+        ["Cadastrar / editar", "Hierarquia", "Consultar", "Comentários", "Importar / exportar", "Ajuda"]
+    )
+
+    with tab_register:
+        st.subheader("Cadastrar ou editar termo")
+
+        term_options = {"+ Novo termo": None}
+        term_options.update(label_to_id_map(data, include_empty=False))
+        chosen_label = st.selectbox("O que deseja editar?", list(term_options.keys()))
+        editing_id = term_options[chosen_label]
+        editing_term = get_term(data, editing_id)
+
+        available_parent_options = label_to_id_map(data, include_empty=True, exclude_id=editing_id)
+        if editing_id:
+            # Remove descendentes da lista de possíveis pais para evitar ciclos.
+            available_parent_options = {
+                label: tid
+                for label, tid in available_parent_options.items()
+                if tid is None or not is_descendant(data, tid, editing_id)
+            }
+
+        current_parent_id = editing_term.get("parent_id") if editing_term else None
+        parent_labels = list(available_parent_options.keys())
+        parent_index = 0
+        for idx, label in enumerate(parent_labels):
+            if available_parent_options[label] == current_parent_id:
+                parent_index = idx
+                break
+
+        related_options = label_to_id_map(data, include_empty=False, exclude_id=editing_id)
+        current_related_ids = set(editing_term.get("related_ids", [])) if editing_term else set()
+        current_related_labels = [label for label, tid in related_options.items() if tid in current_related_ids]
+
+        default_status = editing_term.get("status", "Ativo") if editing_term else "Ativo"
+        status_index = STATUS.index(default_status) if default_status in STATUS else 0
+
+        with st.form("term_form"):
+            term_text = st.text_input("Termo *", value=editing_term.get("term", "") if editing_term else "")
+            parent_label = st.selectbox("Termo pai", parent_labels, index=parent_index)
+            status = st.selectbox("Situação", STATUS, index=status_index)
+            scope_note = st.text_area(
+                "Nota explicativa / nota de escopo",
+                value=editing_term.get("scope_note", "") if editing_term else "",
+                height=100,
+            )
+            history_note = st.text_area(
+                "Nota histórica",
+                value=editing_term.get("history_note", "") if editing_term else "",
+                height=100,
+            )
+            editorial_comment = st.text_area(
+                "Comentário editorial",
+                value=editing_term.get("editorial_comment", "") if editing_term else "",
+                height=100,
+            )
+            related_labels = st.multiselect(
+                "Termos relacionados",
+                list(related_options.keys()),
+                default=current_related_labels,
+            )
+
+            col_save, col_delete = st.columns([2, 1])
+            save_clicked = col_save.form_submit_button("Salvar termo", type="primary")
+            delete_clicked = col_delete.form_submit_button("Excluir termo") if editing_id else False
+
+        if save_clicked:
             try:
-                add_comment(tid, autor, comentario)
-                st.success("Comentário adicionado.")
+                fresh_data, fresh_sha = load_data_from_github(cfg)
+                upsert_term(
+                    fresh_data,
+                    term_id=editing_id,
+                    term_text=term_text,
+                    parent_id=available_parent_options[parent_label],
+                    status=status,
+                    scope_note=scope_note,
+                    history_note=history_note,
+                    editorial_comment=editorial_comment,
+                    related_ids=[related_options[label] for label in related_labels if related_options[label]],
+                    user_name=user_name,
+                )
+                save_data_to_github(
+                    cfg,
+                    fresh_data,
+                    fresh_sha,
+                    f"Atualiza vocabulário: {normalize_text(term_text) or 'termo sem nome'}",
+                )
+                st.success("Termo salvo no GitHub.")
                 st.rerun()
-            except Exception as e:
-                st.error(str(e))
+            except Exception as exc:
+                st.error(str(exc))
 
-        cdf = comments_df(tid)
-        if cdf.empty:
-            st.info("Nenhum comentário registrado para este termo.")
+        if delete_clicked and editing_id:
+            try:
+                fresh_data, fresh_sha = load_data_from_github(cfg)
+                delete_term(fresh_data, editing_id)
+                save_data_to_github(cfg, fresh_data, fresh_sha, f"Remove termo: {editing_term.get('term', '')}")
+                st.success("Termo excluído do GitHub.")
+                st.rerun()
+            except Exception as exc:
+                st.error(str(exc))
+
+    with tab_tree:
+        st.subheader("Hierarquia dos termos")
+        if total == 0:
+            st.warning("Ainda não há termos cadastrados.")
         else:
-            for r in cdf.itertuples(index=False):
-                st.markdown(f"**{r.author or 'Sem autor'}** — {r.created_at}")
-                st.write(r.comment)
+            render_tree(data)
+
+    with tab_search:
+        st.subheader("Consultar termos")
+        query = normalize_text(st.text_input("Buscar por termo ou nota"))
+        status_filter = st.multiselect("Filtrar por situação", STATUS, default=[])
+
+        results = []
+        for term in sorted_terms(data):
+            haystack = " ".join(
+                [
+                    term.get("term", ""),
+                    term.get("scope_note", ""),
+                    term.get("history_note", ""),
+                    term.get("editorial_comment", ""),
+                    term_name_by_id(data, term.get("parent_id")),
+                ]
+            ).casefold()
+            if query and query.casefold() not in haystack:
+                continue
+            if status_filter and term.get("status", "Ativo") not in status_filter:
+                continue
+            results.append(term)
+
+        st.write(f"Resultado: **{len(results)} termo(s)**")
+        for term in results:
+            with st.expander(term_label_with_status(term), expanded=False):
+                render_term_card(data, term)
+
+    with tab_comments:
+        st.subheader("Adicionar comentário")
+        if total == 0:
+            st.warning("Cadastre um termo antes de comentar.")
+        else:
+            comment_options = label_to_id_map(data, include_empty=False)
+            selected_comment_label = st.selectbox("Termo", list(comment_options.keys()), key="comment_term")
+            selected_term_id = comment_options[selected_comment_label]
+            selected_term = get_term(data, selected_term_id)
+
+            if selected_term:
+                with st.form("comment_form", clear_on_submit=True):
+                    comment_text = st.text_area("Comentário", height=120)
+                    add_comment_clicked = st.form_submit_button("Salvar comentário", type="primary")
+
+                if add_comment_clicked:
+                    try:
+                        fresh_data, fresh_sha = load_data_from_github(cfg)
+                        add_comment(fresh_data, selected_term_id, user_name, comment_text)
+                        save_data_to_github(
+                            cfg,
+                            fresh_data,
+                            fresh_sha,
+                            f"Adiciona comentário: {selected_term.get('term', '')}",
+                        )
+                        st.success("Comentário salvo no GitHub.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(str(exc))
+
                 st.divider()
+                render_term_card(data, selected_term)
 
-# Importar/exportar
-with abas[5]:
-    st.header("Importar/exportar")
-    out = export_df(df)
+    with tab_import:
+        st.subheader("Importar / exportar")
 
-    st.subheader("Exportar")
-    st.download_button(
-        "Baixar CSV",
-        data=out.to_csv(index=False).encode("utf-8-sig"),
-        file_name="vocabulario.csv",
-        mime="text/csv",
-        disabled=out.empty,
-    )
-
-    st.subheader("Importar CSV")
-    st.write("Colunas aceitas: `termo`, `termo_pai`, `situacao`, `nota_explicativa`, `nota_historica`, `comentario_editorial`.")
-    upload = st.file_uploader("Selecionar CSV", type="csv")
-    if upload is not None and st.button("Importar/atualizar"):
-        try:
-            criados, atualizados = import_terms(upload)
-            st.success(f"Importação concluída. Criados: {criados}. Atualizados: {atualizados}.")
-            st.rerun()
-        except Exception as e:
-            st.error(str(e))
-
-    modelo = pd.DataFrame(
-        [
-            {
-                "termo": "Processo legislativo",
-                "termo_pai": "",
-                "situacao": "Ativo",
-                "nota_explicativa": "Conjunto de atos relativos à tramitação de proposições.",
-                "nota_historica": "",
-                "comentario_editorial": "",
-            },
-            {
-                "termo": "Projeto de lei",
-                "termo_pai": "Processo legislativo",
-                "situacao": "Ativo",
-                "nota_explicativa": "Espécie de proposição legislativa.",
-                "nota_historica": "",
-                "comentario_editorial": "",
-            },
-        ]
-    )
-    with st.expander("Ver modelo de CSV"):
-        st.dataframe(modelo, use_container_width=True, hide_index=True)
+        st.markdown("**Exportar**")
+        json_data = json.dumps(data, ensure_ascii=False, indent=2)
         st.download_button(
-            "Baixar modelo CSV",
-            data=modelo.to_csv(index=False).encode("utf-8-sig"),
-            file_name="modelo_vocabulario.csv",
+            "Baixar JSON",
+            data=json_data.encode("utf-8"),
+            file_name="vocabulario.json",
+            mime="application/json",
+        )
+        st.download_button(
+            "Baixar CSV",
+            data=data_to_csv(data).encode("utf-8-sig"),
+            file_name="vocabulario.csv",
             mime="text/csv",
         )
+
+        st.divider()
+        st.markdown("**Importar CSV**")
+        st.caption(
+            "Colunas aceitas: termo, termo_pai, situacao, nota_explicativa, nota_historica, "
+            "comentario_editorial, termos_relacionados. Em termos_relacionados, separe por ponto e vírgula."
+        )
+        uploaded = st.file_uploader("Escolha um CSV", type=["csv"])
+        if uploaded is not None:
+            csv_text = uploaded.getvalue().decode("utf-8-sig")
+            if st.button("Importar CSV para o GitHub", type="primary"):
+                try:
+                    fresh_data, fresh_sha = load_data_from_github(cfg)
+                    count = import_csv_into_data(fresh_data, csv_text, user_name)
+                    save_data_to_github(cfg, fresh_data, fresh_sha, f"Importa {count} termo(s) por CSV")
+                    st.success(f"Importação concluída: {count} termo(s) processado(s).")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+
+        with st.expander("Modelo de CSV"):
+            st.code(
+                "termo,termo_pai,situacao,nota_explicativa,nota_historica,comentario_editorial,termos_relacionados\n"
+                "Processo legislativo,,Ativo,Conjunto de atos relativos à tramitação de proposições,,,\n"
+                "Projeto de lei,Processo legislativo,Ativo,Espécie de proposição legislativa,,,\n"
+                "Emenda,Processo legislativo,Ativo,Proposição acessória apresentada a outra proposição,,,Projeto de lei\n",
+                language="csv",
+            )
+
+    with tab_help:
+        st.subheader("Como usar")
+        st.markdown(
+            """
+            1. Cadastre primeiro os termos mais gerais, sem termo pai.
+            2. Depois cadastre os termos específicos, escolhendo o termo pai.
+            3. Use a nota explicativa para definir o uso do termo.
+            4. Use a nota histórica para registrar alterações, origem ou mudanças de denominação.
+            5. Use o comentário editorial para observações internas da equipe.
+            6. Os dados são gravados no arquivo JSON indicado em Secrets, dentro do repositório GitHub.
+
+            **Atenção:** este modelo é simples e bom para uso leve por equipe pequena. Se muitas pessoas editarem ao
+            mesmo tempo, pode haver conflito de gravação. Nesse caso, recarregue a página e salve novamente.
+            """
+        )
+
+
+if __name__ == "__main__":
+    main()
