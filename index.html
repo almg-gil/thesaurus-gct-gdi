@@ -1073,15 +1073,21 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
       for (const char of raw) {
         const code = char.charCodeAt(0);
+
         const isNumber = code >= 48 && code <= 57;
         const isUpper = code >= 65 && code <= 90;
         const isLower = code >= 97 && code <= 122;
-        const isAllowed = isNumber || isUpper || isLower || char === "_" || char === "-";
+        const isAllowed =
+          isNumber ||
+          isUpper ||
+          isLower ||
+          char === "_" ||
+          char === "-";
 
         safe += isAllowed ? char : "-";
       }
 
-      return `almg-${safe}`;
+      return "almg-" + safe;
     }
 
     function getTermParentIdFromXml(element) {
