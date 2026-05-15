@@ -1093,6 +1093,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       if (saveBtn) {
         saveBtn.onclick = async () => {
           const oldParentId = term.parentId;
+
           const oldValues = {
             termo: term.termo,
             conceito: term.conceito,
@@ -1102,7 +1103,16 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
             parentId: term.parentId
           };
 
-          term.termo = document.getElementById("editTermo").value.trim() || term.termo;
+          const novoTermo = document.getElementById("editTermo").value.trim() || term.termo;
+
+          if (novoTermo !== term.termo) {
+            if (!term.termoAnterior && term.revisao !== REVIEW_NOVO) {
+              term.termoAnterior = term.termo;
+            }
+
+            term.termo = novoTermo;
+          }
+
           term.conceito = document.getElementById("editConceito").value.trim();
           term.definicao = document.getElementById("editDefinicao").value.trim();
           term.notaEscopo = document.getElementById("editNotaEscopo").value.trim();
@@ -1110,9 +1120,16 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           term.parentId = document.getElementById("editParent").value || null;
 
           const changed = Object.keys(oldValues).some(key => oldValues[key] !== term[key]);
-          if (changed) markModified(term);
 
-          if (term.parentId && term.parentId !== oldParentId && !state.expanded.includes(term.parentId)) {
+          if (changed) {
+            markModified(term);
+          }
+
+          if (
+            term.parentId &&
+            term.parentId !== oldParentId &&
+            !state.expanded.includes(term.parentId)
+          ) {
             state.expanded.push(term.parentId);
           }
 
@@ -1120,7 +1137,6 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           render();
         };
       }
-
       const suggestDeleteBtn = document.getElementById("suggestDeleteBtn");
       if (suggestDeleteBtn) {
         suggestDeleteBtn.onclick = async () => {
