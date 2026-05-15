@@ -575,6 +575,7 @@
     const ALMG_THESAURUS_URL = "https://dadosabertosd.almg.gov.br/api/v2/thesaurus/termos/lista";
     const ALMG_PAGE_SIZE = 1000;
     const ALMG_DELAY_MS = 1100;
+    const ICMG_TXT_URL = "dados/ICMG.txt";
 
     const REVIEW_ORIGINAL = "original";
     const REVIEW_MODIFICADO = "modificado";
@@ -767,6 +768,8 @@ O app usará os dados de exemplo.`);
 
       parsed.comments = Array.isArray(parsed.comments) ? parsed.comments : [];
       parsed.expanded = Array.isArray(parsed.expanded) ? parsed.expanded.map(String) : [];
+      parsed.icmgSourceVersion = parsed.icmgSourceVersion || "";
+      parsed.icmgSourceImportedAt = parsed.icmgSourceImportedAt || "";
 
       parsed.terms = parsed.terms.map(term => ({
         id: String(term.id || uid("term")),
@@ -2121,6 +2124,132 @@ function renderOriginalSummary(term) {
       reader.readAsText(file, "windows-1252");
     }
 
+    function simpleHash(text) {
+      let hash = 0;
+      const value = String(text || "");
+
+      for (let i = 0; i < value.length; i++) {
+        hash = ((hash << 5) - hash) + value.charCodeAt(i);
+        hash |= 0;
+      }
+
+      return `${value.length}-${hash}`;
+    }
+
+    async function obterVersaoIcmgGithub() {
+      const response = await fetch(`${ICMG_TXT_URL}?check=${Date.now()}`, {
+        method: "HEAD",
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Não foi possível verificar ${ICMG_TXT_URL}. HTTP ${response.status}`);
+      }
+
+      const etag = response.headers.get("etag") || "";
+      const lastModified = response.headers.get("last-modified") || "";
+      const contentLength = response.headers.get("content-length") || "";
+
+      return [etag, lastModified, contentLength].filter(Boolean).join("|");
+    }
+
+    async function baixarIcmgTxtGithub() {
+      const response = await fetch(`${ICMG_TXT_URL}?import=${Date.now()}`, {
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        throw new Error(`Não foi possível baixar ${ICMG_TXT_URL}. HTTP ${response.status}`);
+      }
+
+      const buffer = await response.arrayBuffer();
+
+      // O TXT do ICMG parece estar em Windows-1252, por isso não usamos UTF-8 aqui.
+      return new TextDecoder("windows-1252").decode(buffer);
+    }
+
+    async function importarIcmgGithubSeNecessario() {
+      try {
+        setStatus("Verificando arquivo ICMG.txt...");
+
+        let remoteVersion = "";
+
+        try {
+          remoteVersion = await obterVersaoIcmgGithub();
+        } catch (error) {
+          console.warn("Não foi possível obter versão por HEAD. Será feita verificação pelo conteúdo.", error);
+        }
+
+        // Se o GitHub informou uma versão e ela já foi importada, não faz nada.
+        if (remoteVersion && state.icmgSourceVersion === remoteVersion) {
+          return false;
+        }
+
+        // Se chegou aqui, pode ser arquivo novo, arquivo alterado ou primeira importação.
+        setStatus("Lendo ICMG.txt do GitHub...");
+
+        const text = await baixarIcmgTxtGithub();
+
+        if (!remoteVersion) {
+          remoteVersion = `hash:${simpleHash(text)}`;
+        }
+
+        // Segunda conferência, útil quando a versão veio por hash calculado.
+        if (state.icmgSourceVersion === remoteVersion) {
+          return false;
+        }
+
+        setStatus("Montando árvore a partir do ICMG.txt...");
+
+        const termos = montarTermosDaEstruturaIcmg(text);
+
+        if (!termos.length) {
+          throw new Error("Nenhum termo autorizado foi identificado no ICMG.txt.");
+        }
+
+        const idsValidos = new Set(termos.map(term => term.id));
+
+        const rootIds = termos
+          .filter(term => term.parentId === null)
+          .map(term => term.id);
+
+        const selectedIdAtualExiste = state.selectedId && idsValidos.has(state.selectedId);
+
+        let expanded = Array.isArray(state.expanded)
+          ? state.expanded.filter(id => idsValidos.has(id))
+          : [];
+
+        if (!expanded.length) {
+          expanded = rootIds;
+        }
+
+        const comments = Array.isArray(state.comments)
+          ? state.comments.filter(comment => idsValidos.has(comment.termId))
+          : [];
+
+        state = normalizeState({
+          selectedId: selectedIdAtualExiste ? state.selectedId : (termos[0]?.id || null),
+          expanded,
+          terms: termos,
+          comments,
+          icmgSourceVersion: remoteVersion,
+          icmgSourceImportedAt: nowLabel()
+        });
+
+        reviewMode = false;
+
+        await saveState();
+  
+        setStatus(`ICMG.txt atualizado. Termos carregados: ${termos.length}.`);
+
+        return true;
+      } catch (error) {
+        console.error(error);
+        setStatus(`Não foi possível atualizar pelo ICMG.txt: ${error.message}`);
+        return false;
+      }
+    }
+
     // ============================================================
     // Importação do Thesaurus ALMG
     // Busca as páginas e filtra apenas <autorizado>true</autorizado>.
@@ -2487,9 +2616,18 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
     });
 
     async function iniciarApp() {
+      setStatus("Carregando tesauro...");
+
       state = await loadState();
       state = normalizeState(state);
+
+      const atualizadoPeloTxt = await importarIcmgGithubSeNecessario();
+
       render();
+
+      if (!atualizadoPeloTxt) {
+        setStatus("");
+      }
     }
 
     initResizableLayout();
