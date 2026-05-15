@@ -540,10 +540,12 @@
         <div class="toolbar">
           <button id="exportBtn">Exportar JSON</button>
           <button id="importBtn">Importar JSON</button>
+          <button id="importIcmgBtn">Importar ICMG TXT</button>
           <button id="importAlmgBtn">Importar Thesaurus ALMG</button>
           <button id="resetBtn" class="danger">Restaurar exemplo</button>
         </div>
         <input id="importFile" type="file" accept="application/json" hidden />
+        <input id="importIcmgFile" type="file" accept=".txt,text/plain" hidden />
         <p class="muted">Nesta versão, os dados são salvos no Supabase, na tabela app_state.</p>
         <p id="statusMessage" class="muted"></p>
       </div>
@@ -670,8 +672,10 @@
     const currentUser = document.getElementById("currentUser");
     const exportBtn = document.getElementById("exportBtn");
     const importBtn = document.getElementById("importBtn");
+    const importIcmgBtn = document.getElementById("importIcmgBtn");
     const importAlmgBtn = document.getElementById("importAlmgBtn");
     const importFile = document.getElementById("importFile");
+    const importIcmgFile = document.getElementById("importIcmgFile");
     const resetBtn = document.getElementById("resetBtn");
     const statusMessage = document.getElementById("statusMessage");
 
@@ -1830,6 +1834,295 @@ function renderOriginalSummary(term) {
       reader.readAsText(file);
     }
 
+    function normalizeIcmgKey(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toUpperCase();
+    }
+
+    function normalizeIcmgName(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    }
+
+    function slugIcmg(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase();
+    }
+
+    function firstField(record, key) {
+      const values = record.fields[key] || [];
+      return String(values[0] || "").trim();
+    }
+
+    function allFields(record, key) {
+      return (record.fields[key] || [])
+        .map(v => String(v || "").trim())
+        .filter(Boolean);
+    }
+
+    function parseIcmgTxt(text) {
+      const lines = String(text || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .split("\n");
+
+      const records = [];
+      let current = null;
+      let currentKey = null;
+
+      function startRecord(kind, value) {
+        if (current) records.push(current);
+
+        current = {
+          kind,
+          fields: {}
+        };
+
+        currentKey = kind;
+        current.fields[currentKey] = [String(value || "").trim()];
+      }
+
+      function addField(key, value) {
+        if (!current) return;
+
+        currentKey = key;
+
+        if (!current.fields[currentKey]) {
+          current.fields[currentKey] = [];
+        }
+
+        current.fields[currentKey].push(String(value || "").trim());
+      }
+
+      function appendToCurrentField(value) {
+        if (!current || !currentKey) return;
+
+        const values = current.fields[currentKey];
+        if (!values || !values.length) return;
+
+        const lastIndex = values.length - 1;
+        const line = String(value || "").trimEnd();
+
+        if (!line.trim()) {
+          values[lastIndex] += "\n";
+        } else if (values[lastIndex]) {
+          values[lastIndex] += "\n" + line;
+        } else {
+          values[lastIndex] = line;
+        }
+      }
+
+      for (const rawLine of lines) {
+        const line = rawLine.trimEnd();
+
+        const match = line.match(/^\.\.([^:]+?)\.?:\s*(.*)$/);
+
+        if (match) {
+          const key = normalizeIcmgKey(match[1]);
+          const value = match[2] || "";
+
+          if (key === "TERMO" || key === "NAO AUTORIZADO") {
+            startRecord(key, value);
+          } else {
+            addField(key, value);
+          }
+        } else {
+          appendToCurrentField(line);
+        }
+      }
+
+      if (current) records.push(current);
+
+      return records;
+    }
+
+    function termoFromIcmgRecord(record) {
+      const termo = firstField(record, "TERMO");
+      const tq = firstField(record, "TQ");
+      const controle = firstField(record, "CONTROLE");
+      const classe = firstField(record, "CLASSE") || "Sem classe";
+      const tg = firstField(record, "TG");
+
+      const definicao = firstField(record, "DF");
+      const notaEscopo = allFields(record, "NE").join("\n\n");
+      const notaHistorica = allFields(record, "NH").join("\n\n");
+      const usadosPor = allFields(record, "UP");
+
+      let notaUso = notaHistorica;
+
+      if (usadosPor.length) {
+        notaUso = [
+          notaUso,
+          "Usado por:",
+          ...usadosPor.map(item => `- ${item}`)
+        ].filter(Boolean).join("\n");
+      }
+
+      const id = controle ? `icmg-${controle}` : `icmg-${slugIcmg(termo)}`;
+
+      return {
+        id,
+        parentId: null,
+        termo,
+        termoAnterior: "",
+        conceito: tq || "",
+        definicao,
+        notaEscopo,
+        notaUso,
+        relacionados: [],
+        revisao: REVIEW_ORIGINAL,
+        original: null,
+        revisaoPor: "",
+        revisaoEm: "",
+        _classe: classe,
+        _tg: tg,
+        _tr: allFields(record, "TR")
+      };
+    }
+
+    function montarTermosDaEstruturaIcmg(text) {
+      const records = parseIcmgTxt(text);
+
+      const authorizedRecords = records.filter(record => {
+        const ativo = firstField(record, "ATIVO").toUpperCase();
+        return record.kind === "TERMO" && ativo === "S" && firstField(record, "TERMO");
+      });
+
+      const terms = authorizedRecords.map(termoFromIcmgRecord);
+
+      const byName = new Map();
+      const byTq = new Map();
+
+      for (const term of terms) {
+        byName.set(normalizeIcmgName(term.termo), term.id);
+
+        if (term.conceito) {
+          byTq.set(normalizeIcmgName(term.conceito), term.id);
+        }
+      }
+
+      const classes = Array.from(new Set(
+        terms.map(term => term._classe || "Sem classe").filter(Boolean)
+      )).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+      const classTerms = classes.map(classe => ({
+        id: `classe-${slugIcmg(classe)}`,
+        parentId: null,
+        termo: classe,
+        termoAnterior: "",
+        conceito: "",
+        definicao: "Classe geral importada do documento ICMG.",
+        notaEscopo: "",
+        notaUso: "",
+        relacionados: [],
+        revisao: REVIEW_ORIGINAL,
+        original: null,
+        revisaoPor: "",
+        revisaoEm: ""
+      }));
+
+      const classIdByName = new Map(
+        classTerms.map(term => [normalizeIcmgName(term.termo), term.id])
+      );
+
+      for (const term of terms) {
+        const tg = term._tg || "";
+        const classe = term._classe || "Sem classe";
+
+        const tgNorm = normalizeIcmgName(tg);
+        const classeNorm = normalizeIcmgName(classe);
+
+        const classId = classIdByName.get(classeNorm) || null;
+
+        if (!tg) {
+          term.parentId = classId;
+        } else if (tgNorm === classeNorm) {
+          term.parentId = classId;
+        } else if (byName.has(tgNorm)) {
+          term.parentId = byName.get(tgNorm);
+        } else if (byTq.has(tgNorm)) {
+          term.parentId = byTq.get(tgNorm);
+        } else {
+          term.parentId = classId;
+        }
+
+        const relatedIds = [];
+
+        for (const relatedName of term._tr || []) {
+          const relatedNorm = normalizeIcmgName(relatedName);
+          const relatedId = byName.get(relatedNorm) || byTq.get(relatedNorm);
+
+          if (relatedId && relatedId !== term.id && !relatedIds.includes(relatedId)) {
+            relatedIds.push(relatedId);
+          }
+        }
+
+        term.relacionados = relatedIds;
+
+        delete term._classe;
+        delete term._tg;
+        delete term._tr;
+      }
+
+      return classTerms.concat(terms);
+    }
+
+    function importarIcmgTxt(file) {
+      const reader = new FileReader();
+
+      reader.onload = async () => {
+        try {
+          if (!confirm("Importar a estrutura do documento ICMG? Isso substituirá os dados atuais do protótipo.")) {
+            return;
+          }
+
+          setStatus("Importando estrutura do documento ICMG...");
+
+          const termos = montarTermosDaEstruturaIcmg(reader.result);
+
+          if (!termos.length) {
+            throw new Error("Nenhum termo autorizado ativo foi identificado no arquivo.");
+          }
+
+          const rootIds = termos
+            .filter(term => term.parentId === null)
+            .map(term => term.id);
+
+          state = normalizeState({
+            selectedId: termos[0]?.id || null,
+            expanded: rootIds,
+            terms: termos,
+            comments: []
+          });
+
+          reviewMode = false;
+
+          await saveState();
+          render();
+
+          setStatus(`Importação concluída. Termos carregados: ${termos.length}.`);
+          alert(`Importação concluída. Termos carregados: ${termos.length}.`);
+        } catch (error) {
+          console.error(error);
+          setStatus("Erro na importação do ICMG.");
+          alert(`Erro ao importar o documento ICMG.\n\nDetalhe: ${error.message}`);
+        }
+      };
+
+      reader.readAsText(file, "UTF-8");
+    }
+
     // ============================================================
     // Importação do Thesaurus ALMG
     // Busca as páginas e filtra apenas <autorizado>true</autorizado>.
@@ -2179,12 +2472,13 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
 
     exportBtn.addEventListener("click", exportJson);
     importBtn.addEventListener("click", () => importFile.click());
+    importIcmgBtn.addEventListener("click", () => importIcmgFile.click());
     importAlmgBtn.addEventListener("click", importarThesaurusAlmg);
 
-    importFile.addEventListener("change", e => {
+    importIcmgFile.addEventListener("change", e => {
       const file = e.target.files[0];
-      if (file) importJson(file);
-      importFile.value = "";
+      if (file) importarIcmgTxt(file);
+      importIcmgFile.value = "";
     });
 
     resetBtn.addEventListener("click", async () => {
