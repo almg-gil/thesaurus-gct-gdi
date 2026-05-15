@@ -576,6 +576,7 @@
     const ALMG_PAGE_SIZE = 1000;
     const ALMG_DELAY_MS = 1100;
     const ICMG_TXT_URL = "dados/ICMG.txt";
+    const ICMG_IMPORT_VERSION = "icmg-base-001";
 
     const REVIEW_ORIGINAL = "original";
     const REVIEW_MODIFICADO = "modificado";
@@ -659,6 +660,10 @@
     let state = structuredClone(exemplo);
     let draggedTermId = null;
     let reviewMode = false;
+
+    let termById = new Map();
+    let childrenByParent = new Map();
+    let termPathCache = new Map();
 
     const treeEl = document.getElementById("tree");
     const reviewTopBtn = document.getElementById("reviewTopBtn");
@@ -838,28 +843,64 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    function parentKey(parentId) {
+      return parentId ? String(parentId) : "__ROOT__";
+    }
+
+    function buildIndexes() {
+      termById = new Map();
+      childrenByParent = new Map();
+      termPathCache = new Map();
+
+      for (const term of state.terms) {
+        termById.set(String(term.id), term);
+
+        const key = parentKey(term.parentId);
+
+        if (!childrenByParent.has(key)) {
+          childrenByParent.set(key, []);
+        }
+
+        childrenByParent.get(key).push(term);
+      }
+
+      for (const children of childrenByParent.values()) {
+        children.sort((a, b) => a.termo.localeCompare(b.termo, "pt-BR"));
+      }
+    }
+
     function getTerm(id) {
-      return state.terms.find(t => t.id === id) || null;
+      if (!id) return null;
+      return termById.get(String(id)) || null;
     }
 
     function childrenOf(parentId) {
-      return state.terms
-        .filter(t => t.parentId === parentId)
-        .sort((a, b) => a.termo.localeCompare(b.termo, "pt-BR"));
+      return childrenByParent.get(parentKey(parentId)) || [];
     }
 
     function termPath(term) {
+      if (!term) return "";
+
+      const cacheKey = String(term.id);
+
+      if (termPathCache.has(cacheKey)) {
+        return termPathCache.get(cacheKey);
+      }
+
       const parts = [];
       let current = term;
       const guard = new Set();
 
       while (current && !guard.has(current.id)) {
         guard.add(current.id);
-        parts.push(displayTermName(current));;
+        parts.push(displayTermName(current));
         current = getTerm(current.parentId);
       }
 
-      return parts.reverse().join(" / ");
+      const path = parts.reverse().join(" / ");
+      termPathCache.set(cacheKey, path);
+
+      return path;
     }
 
     function snapshotTerm(term) {
@@ -1223,7 +1264,7 @@ function renderOriginalSummary(term) {
       toggle.className = "toggle";
       toggle.textContent = children.length ? (expanded ? "▾" : "▸") : "•";
       toggle.title = expanded ? "Recolher" : "Expandir";
-      toggle.onclick = async (e) => {
+      toggle.onclick = (e) => {
         e.stopPropagation();
         if (!children.length) return;
 
@@ -1231,10 +1272,9 @@ function renderOriginalSummary(term) {
           state.expanded = state.expanded.filter(id => id !== term.id);
         } else {
           state.expanded.push(term.id);
-        }
+      }
 
-        await saveState();
-        render();
+      render();
       };
 
       const label = document.createElement("button");
@@ -2170,37 +2210,17 @@ function renderOriginalSummary(term) {
 
     async function importarIcmgGithubSeNecessario() {
       try {
-        setStatus("Verificando arquivo ICMG.txt...");
-
-        let remoteVersion = "";
-
-        try {
-          remoteVersion = await obterVersaoIcmgGithub();
-        } catch (error) {
-          console.warn("Não foi possível obter versão por HEAD. Será feita verificação pelo conteúdo.", error);
-        }
-
-        // Se o GitHub informou uma versão e ela já foi importada, não faz nada.
-        if (remoteVersion && state.icmgSourceVersion === remoteVersion) {
+        if (
+          state.icmgSourceVersion === ICMG_IMPORT_VERSION &&
+          Array.isArray(state.terms) &&
+          state.terms.length
+        ) {
           return false;
         }
 
-        // Se chegou aqui, pode ser arquivo novo, arquivo alterado ou primeira importação.
-        setStatus("Lendo ICMG.txt do GitHub...");
+        setStatus("Importando ICMG.txt do GitHub...");
 
         const text = await baixarIcmgTxtGithub();
-
-        if (!remoteVersion) {
-          remoteVersion = `hash:${simpleHash(text)}`;
-        }
-
-        // Segunda conferência, útil quando a versão veio por hash calculado.
-        if (state.icmgSourceVersion === remoteVersion) {
-          return false;
-        }
-
-        setStatus("Montando árvore a partir do ICMG.txt...");
-
         const termos = montarTermosDaEstruturaIcmg(text);
 
         if (!termos.length) {
@@ -2215,37 +2235,29 @@ function renderOriginalSummary(term) {
 
         const selectedIdAtualExiste = state.selectedId && idsValidos.has(state.selectedId);
 
-        let expanded = Array.isArray(state.expanded)
-          ? state.expanded.filter(id => idsValidos.has(id))
-          : [];
-
-        if (!expanded.length) {
-          expanded = rootIds;
-        }
-
         const comments = Array.isArray(state.comments)
           ? state.comments.filter(comment => idsValidos.has(comment.termId))
           : [];
 
         state = normalizeState({
           selectedId: selectedIdAtualExiste ? state.selectedId : (termos[0]?.id || null),
-          expanded,
+          expanded: rootIds,
           terms: termos,
           comments,
-          icmgSourceVersion: remoteVersion,
+          icmgSourceVersion: ICMG_IMPORT_VERSION,
           icmgSourceImportedAt: nowLabel()
         });
 
         reviewMode = false;
 
         await saveState();
-  
-        setStatus(`ICMG.txt atualizado. Termos carregados: ${termos.length}.`);
+
+        setStatus(`ICMG.txt importado. Termos carregados: ${termos.length}.`);
 
         return true;
       } catch (error) {
         console.error(error);
-        setStatus(`Não foi possível atualizar pelo ICMG.txt: ${error.message}`);
+        setStatus(`Não foi possível importar o ICMG.txt: ${error.message}`);
         return false;
       }
     }
@@ -2570,6 +2582,8 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
 
    function render() {
       state = normalizeState(state);
+      buildIndexes();
+
       renderTree();
       renderParentOptions();
       updateReviewTopButton();
