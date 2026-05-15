@@ -628,6 +628,7 @@ O app usará os dados de exemplo.`);
         id: String(term.id || uid("term")),
         parentId: term.parentId ? String(term.parentId) : null,
         termo: term.termo || "Sem termo",
+        termoAnterior: term.termoAnterior || "",
         conceito: term.conceito || "",
         definicao: term.definicao || "",
         notaEscopo: term.notaEscopo || "",
@@ -695,7 +696,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
       while (current && !guard.has(current.id)) {
         guard.add(current.id);
-        parts.push(current.termo);
+        parts.push(displayTermName(current));;
         current = getTerm(current.parentId);
       }
 
@@ -713,6 +714,18 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       if (revisao === REVIEW_NOVO) return "novo";
       if (revisao === REVIEW_EXCLUIR) return "exclusão sugerida";
       return "original";
+    }
+
+    function displayTermName(term) {
+      if (
+        term.termoAnterior &&
+        term.termoAnterior !== term.termo &&
+        term.revisao !== REVIEW_NOVO
+      ) {
+        return `${term.termo} (${term.termoAnterior})`;
+      }
+
+      return term.termo;
     }
 
     function hasMatchingDescendant(term, query) {
@@ -860,7 +873,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
       const label = document.createElement("button");
       label.className = "term-label";
-      label.textContent = term.termo;
+      label.textContent = displayTermName(term);;
       label.onclick = async () => {
         state.selectedId = term.id;
         await saveState();
@@ -919,7 +932,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
       termArea.innerHTML = `
         <div class="term-header">
-          <h1>${escapeHtml(term.termo)}</h1>
+          <h1>${escapeHtml(displayTermName(term))}</h1>
           <div class="muted">${escapeHtml(termPath(term))}</div>
           <div class="muted">Situação: <strong>${escapeHtml(reviewLabel(term.revisao))}</strong></div>
         </div>
@@ -1217,6 +1230,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         id,
         parentId,
         termo: value,
+        termoAnterior: "",
         conceito: "",
         definicao: "",
         notaEscopo: "",
@@ -1394,6 +1408,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           id,
           parentId,
           termo,
+          termoAnterior: "",
           conceito: "",
           definicao,
           notaEscopo,
@@ -1419,6 +1434,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
                   id: pathId,
                   parentId: previousId,
                   termo: part,
+                  termoAnterior: "",
                   conceito: "",
                   definicao: "",
                   notaEscopo: "",
