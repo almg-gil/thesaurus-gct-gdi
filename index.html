@@ -936,6 +936,10 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       return state.terms.filter(t => t.revisao && t.revisao !== REVIEW_ORIGINAL);
     }
 
+    function isTermPending(term) {
+      return Boolean(term && term.revisao && term.revisao !== REVIEW_ORIGINAL);
+    }
+
     function updateReviewTopButton() {
       const count = pendingTerms().length;
       reviewTopBtn.textContent = `Ver pendências (${count})`;
@@ -1281,7 +1285,7 @@ function renderOriginalSummary(term) {
 
       const deleteButtonLabel = term.revisao === REVIEW_EXCLUIR ? "Cancelar sugestão de exclusão" : "Sugerir exclusão";
       const deleteButtonClass = term.revisao === REVIEW_EXCLUIR ? "success" : "danger";
-      const pendingCount = getPendingTerms().length;
+      const pendingCount = isTermPending(term) ? 1 : 0;
 
       termArea.innerHTML = `
         <div class="term-header">
@@ -1367,8 +1371,8 @@ function renderOriginalSummary(term) {
         </div>
 
         <div id="pendencias" class="panel">
-          ${renderPendingPanel()}
-        </div>
+          ${renderPendingPanel(term)}
+          </div>
       `;
 
       wireTermArea(term);
@@ -1431,11 +1435,13 @@ function renderOriginalSummary(term) {
       return `<ul class="pending-summary">${changes.map(change => `<li>${change}</li>`).join("")}</ul>`;
     }
 
-    function renderPendingPanel() {
-      const pending = getPendingTerms();
+    function renderPendingPanel(termFilter = null) {
+      const pending = termFilter
+        ? (isTermPending(termFilter) ? [termFilter] : [])
+        : getPendingTerms();
 
       if (!pending.length) {
-        return '<div class="empty">Não há pendências para deliberar.</div>';
+        return '<div class="empty">Não há pendências para este termo.</div>';
       }
 
       return `
