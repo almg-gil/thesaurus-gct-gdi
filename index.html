@@ -994,7 +994,6 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           if (action === "view") {
             state.selectedId = termId;
             reviewMode = false;
-            await saveState();
             render();
             return;
           }
@@ -1238,9 +1237,9 @@ function renderOriginalSummary(term) {
       const label = document.createElement("button");
       label.className = "term-label";
       label.textContent = displayTermName(term);;
-      label.onclick = async () => {
+      label.onclick = () => {
         state.selectedId = term.id;
-        await saveState();
+        reviewMode = false;
         render();
       };
 
@@ -1685,13 +1684,13 @@ function renderOriginalSummary(term) {
           const termId = btn.dataset.termId;
           const action = btn.dataset.pendingAction;
 
-          if (action === "view") {
-            state.selectedId = termId;
-            await saveState();
-            render();
-            setActiveTab("cadastro");
-            return;
-          }
+         if (action === "view") {
+          state.selectedId = termId;
+          reviewMode = false;
+          render();
+          setActiveTab("cadastro");
+          return;
+        }
 
           if (action === "approve") {
             await approvePending(termId);
