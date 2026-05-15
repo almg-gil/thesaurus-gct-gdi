@@ -786,6 +786,9 @@ O app usará os dados de exemplo.`);
         notaEscopo: term.notaEscopo || "",
         notaUso: term.notaUso || "",
         relacionados: Array.isArray(term.relacionados) ? term.relacionados.map(String) : [],
+        relacionadosNaoAutorizados: Array.isArray(term.relacionadosNaoAutorizados)
+            ? term.relacionadosNaoAutorizados.map(String)
+            : [],
         revisao: normalizeReview(term),
         original: term.original && typeof term.original === "object" ? {
           parentId: term.original.parentId ? String(term.original.parentId) : null,
@@ -795,7 +798,10 @@ O app usará os dados de exemplo.`);
           definicao: term.original.definicao || "",
           notaEscopo: term.original.notaEscopo || "",
           notaUso: term.original.notaUso || "",
-          relacionados: Array.isArray(term.original.relacionados) ? term.original.relacionados.map(String) : []
+          relacionados: Array.isArray(term.original.relacionados) ? term.original.relacionados.map(String) : [],
+          relacionadosNaoAutorizados: Array.isArray(term.original.relacionadosNaoAutorizados)
+            ? term.original.relacionadosNaoAutorizados.map(String)
+            : []
         } : null,
         revisaoPor: term.revisaoPor || "",
         revisaoEm: term.revisaoEm || ""
@@ -912,8 +918,10 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         definicao: term.definicao || "",
         notaEscopo: term.notaEscopo || "",
         notaUso: term.notaUso || "",
-        relacionados: Array.isArray(term.relacionados) ? [...term.relacionados] : []
-      };
+        relacionados: Array.isArray(term.relacionados) ? [...term.relacionados] : [],
+        relacionadosNaoAutorizados: Array.isArray(term.relacionadosNaoAutorizados)
+          ? [...term.relacionadosNaoAutorizados]
+          : []
     }
 
     function registerReviewMetadata(term) {
@@ -939,6 +947,9 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       term.notaEscopo = term.original.notaEscopo || "";
       term.notaUso = term.original.notaUso || "";
       term.relacionados = Array.isArray(term.original.relacionados) ? [...term.original.relacionados] : [];
+      term.relacionadosNaoAutorizados = Array.isArray(term.original.relacionadosNaoAutorizados)
+        ? [...term.original.relacionadosNaoAutorizados]
+        : [];
 
       return true;
     }
@@ -1108,11 +1119,11 @@ function renderOriginalSummary(term) {
   }
 
   if ((term.original.notaEscopo || "") !== (term.notaEscopo || "")) {
-    linhas.push("Nota de escopo alterada");
+    linhas.push("Nota Explicativa alterada");
   }
 
   if ((term.original.notaUso || "") !== (term.notaUso || "")) {
-    linhas.push("Nota de uso alterada");
+    linhas.push("Nota Histórica alterada");
   }
 
   if (!linhas.length) {
@@ -1333,6 +1344,10 @@ function renderOriginalSummary(term) {
       const comments = state.comments.filter(c => c.termId === term.id)
         .sort((a, b) => Number(a.resolved) - Number(b.resolved) || String(b.createdAt).localeCompare(String(a.createdAt)));
 
+      const naoAutorizados = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
       const deleteButtonLabel = term.revisao === REVIEW_EXCLUIR ? "Cancelar sugestão de exclusão" : "Sugerir exclusão";
       const deleteButtonClass = term.revisao === REVIEW_EXCLUIR ? "success" : "danger";
       const pendingCount = isTermPending(term) ? 1 : 0;
@@ -1366,11 +1381,11 @@ function renderOriginalSummary(term) {
               <textarea id="editDefinicao">${escapeHtml(term.definicao || "")}</textarea>
             </div>
             <div class="field full">
-              <label>Nota de escopo</label>
+              <label>Nota Explicativa</label>
               <textarea id="editNotaEscopo">${escapeHtml(term.notaEscopo || "")}</textarea>
             </div>
             <div class="field full">
-              <label>Nota de uso</label>
+             <label>Nota Histórica</label>
               <textarea id="editNotaUso">${escapeHtml(term.notaUso || "")}</textarea>
             </div>
             <div class="field full">
@@ -1399,14 +1414,18 @@ function renderOriginalSummary(term) {
           </div>
 
           <div class="relation-box">
-            <strong>Termos relacionados</strong>
+            <strong>Sinônimos autorizados / TR</strong>
             ${relatedTerms.length ? `<ul class="small-list">${relatedTerms.map(r => `<li>${escapeHtml(r.termo)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
             <div class="toolbar">
               <select id="addRelatedSelect">${relatedOptions(term.id)}</select>
               <button id="addRelatedBtn">Adicionar relação</button>
             </div>
           </div>
-        </div>
+
+          <div class="relation-box">
+            <strong>Sinônimos não autorizados / UP</strong>
+            ${naoAutorizados.length ? `<ul class="small-list">${naoAutorizados.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
+            </div>
 
         <div id="comentarios" class="panel">
           <div class="field">
@@ -1467,15 +1486,22 @@ function renderOriginalSummary(term) {
       }
 
       if ((original.notaEscopo || "") !== (term.notaEscopo || "")) {
-        changes.push("Nota de escopo alterada");
+        changes.push("Nota Explicativa alterada");
       }
 
       if ((original.notaUso || "") !== (term.notaUso || "")) {
-        changes.push("Nota de uso alterada");
+        changes.push("Nota Histórica alterada");
       }
 
       if (JSON.stringify(original.relacionados || []) !== JSON.stringify(term.relacionados || [])) {
         changes.push("Termos relacionados alterados");
+      }
+
+      if (
+        JSON.stringify(original.relacionadosNaoAutorizados || []) !==
+        JSON.stringify(term.relacionadosNaoAutorizados || [])
+      ) {
+        changes.push("Sinônimos não autorizados alterados");
       }
 
       if (!changes.length) {
@@ -1834,6 +1860,7 @@ function renderOriginalSummary(term) {
         notaEscopo: "",
         notaUso: "",
         relacionados: [],
+        relacionadosNaoAutorizados: [],
         revisao: REVIEW_NOVO,
         original: null,
         revisaoPor: currentUser.value.trim() || "Usuário",
@@ -1997,19 +2024,15 @@ function renderOriginalSummary(term) {
       const tg = firstField(record, "TG");
 
       const definicao = firstField(record, "DF");
-      const notaEscopo = allFields(record, "NE").join("\n\n");
+
+      // NE = Nota Explicativa
+      const notaExplicativa = allFields(record, "NE").join("\n\n");
+
+      // NH = Nota Histórica
       const notaHistorica = allFields(record, "NH").join("\n\n");
+
+      // UP = Usado por / sinônimos não autorizados
       const usadosPor = allFields(record, "UP");
-
-      let notaUso = notaHistorica;
-
-      if (usadosPor.length) {
-        notaUso = [
-          notaUso,
-          "Usado por:",
-          ...usadosPor.map(item => `- ${item}`)
-        ].filter(Boolean).join("\n");
-      }
 
       const id = controle ? `icmg-${controle}` : `icmg-${slugIcmg(termo)}`;
 
@@ -2020,9 +2043,21 @@ function renderOriginalSummary(term) {
         termoAnterior: "",
         conceito: tq || "",
         definicao,
-        notaEscopo,
-        notaUso,
+
+        // Mantemos o nome interno notaEscopo para mexer menos no app,
+        // mas o rótulo na tela será "Nota Explicativa".
+        notaEscopo: notaExplicativa,
+
+        // Mantemos o nome interno notaUso para mexer menos no app,
+        // mas o rótulo na tela será "Nota Histórica".
+        notaUso: notaHistorica,
+
+        // TR será resolvido depois como relacionamento autorizado.
         relacionados: [],
+
+        // UP fica aqui, separado dos TR.
+        relacionadosNaoAutorizados: usadosPor,
+
         revisao: REVIEW_ORIGINAL,
         original: null,
         revisaoPor: "",
