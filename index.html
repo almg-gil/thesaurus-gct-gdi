@@ -401,6 +401,48 @@
       padding-left: 18px;
     }
 
+    .pending-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .pending-card {
+      border: 1px solid var(--border);
+      border-left: 5px solid transparent;
+      border-radius: 6px;
+      padding: 10px;
+      background: #fff;
+    }
+
+    .pending-card.review-modificado {
+      border-left-color: var(--blue);
+      background: var(--blue-bg);
+    }
+
+    .pending-card.review-novo {
+      border-left-color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .pending-card.review-excluir {
+      border-left-color: var(--red);
+      background: var(--red-bg);
+    }
+
+    .pending-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 5px;
+    }
+
+    .pending-summary {
+      margin: 6px 0;
+      padding-left: 18px;
+      line-height: 1.5;
+    }
+
     .export-box {
       margin-top: 16px;
       border-top: 1px solid var(--border);
@@ -495,8 +537,8 @@
     // Use a anon public key.
     // Não use a chave service_role no HTML.
     // ============================================================
-    const SUPABASE_URL = "https://hyimodkpyzunfrodnola.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5aW1vZGtweXp1bmZyb2Rub2xhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NzkyMzcsImV4cCI6MjA5NDI1NTIzN30.DmBvcx9_KQM3-ce9-99O5jrfSeAHBo-cMpPGSGcFz3s";
+    const SUPABASE_URL = "OCULTEI";
+    const SUPABASE_ANON_KEY = "OCULTEI";
     const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     // ============================================================
@@ -704,7 +746,19 @@ O app usará os dados de exemplo.`);
         notaEscopo: term.notaEscopo || "",
         notaUso: term.notaUso || "",
         relacionados: Array.isArray(term.relacionados) ? term.relacionados.map(String) : [],
-        revisao: normalizeReview(term)
+        revisao: normalizeReview(term),
+        original: term.original && typeof term.original === "object" ? {
+          parentId: term.original.parentId ? String(term.original.parentId) : null,
+          termo: term.original.termo || "",
+          termoAnterior: term.original.termoAnterior || "",
+          conceito: term.original.conceito || "",
+          definicao: term.original.definicao || "",
+          notaEscopo: term.original.notaEscopo || "",
+          notaUso: term.original.notaUso || "",
+          relacionados: Array.isArray(term.original.relacionados) ? term.original.relacionados.map(String) : []
+        } : null,
+        revisaoPor: term.revisaoPor || "",
+        revisaoEm: term.revisaoEm || ""
       }));
 
       if (!parsed.selectedId || !parsed.terms.some(t => t.id === parsed.selectedId)) {
@@ -773,10 +827,78 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       return parts.reverse().join(" / ");
     }
 
+    function snapshotTerm(term) {
+      return {
+        parentId: term.parentId || null,
+        termo: term.termo || "",
+        termoAnterior: term.termoAnterior || "",
+        conceito: term.conceito || "",
+        definicao: term.definicao || "",
+        notaEscopo: term.notaEscopo || "",
+        notaUso: term.notaUso || "",
+        relacionados: Array.isArray(term.relacionados) ? [...term.relacionados] : []
+      };
+    }
+
+    function registerReviewMetadata(term) {
+      term.revisaoPor = currentUser.value.trim() || "Usuário";
+      term.revisaoEm = nowLabel();
+    }
+
+    function ensureOriginal(term) {
+      if (!term || term.revisao === REVIEW_NOVO) return;
+      if (!term.original) {
+        term.original = snapshotTerm(term);
+      }
+    }
+
+    function restoreTermFromOriginal(term) {
+      if (!term || !term.original) return false;
+
+      term.parentId = term.original.parentId || null;
+      term.termo = term.original.termo || term.termo;
+      term.termoAnterior = term.original.termoAnterior || "";
+      term.conceito = term.original.conceito || "";
+      term.definicao = term.original.definicao || "";
+      term.notaEscopo = term.original.notaEscopo || "";
+      term.notaUso = term.original.notaUso || "";
+      term.relacionados = Array.isArray(term.original.relacionados) ? [...term.original.relacionados] : [];
+
+      return true;
+    }
+
+    function clearReview(term) {
+      if (!term) return;
+      term.revisao = REVIEW_ORIGINAL;
+      term.original = null;
+      term.revisaoPor = "";
+      term.revisaoEm = "";
+    }
+
     function markModified(term) {
       if (!term) return;
       if (term.revisao === REVIEW_NOVO || term.revisao === REVIEW_EXCLUIR) return;
+      ensureOriginal(term);
       term.revisao = REVIEW_MODIFICADO;
+      registerReviewMetadata(term);
+    }
+
+    function getPendingTerms() {
+      const order = {
+        [REVIEW_EXCLUIR]: 1,
+        [REVIEW_NOVO]: 2,
+        [REVIEW_MODIFICADO]: 3
+      };
+
+      return state.terms
+        .filter(t => t.revisao && t.revisao !== REVIEW_ORIGINAL)
+        .slice()
+        .sort((a, b) => {
+          const orderA = order[a.revisao] || 99;
+          const orderB = order[b.revisao] || 99;
+          if (orderA !== orderB) return orderA - orderB;
+          return termPath(a).localeCompare(termPath(b), "pt-BR");
+        });
     }
 
     function reviewLabel(revisao) {
@@ -787,11 +909,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
     }
 
     function displayTermName(term) {
-      if (
-        term.termoAnterior &&
-        term.termoAnterior !== term.termo &&
-        term.revisao !== REVIEW_NOVO
-      ) {
+      if (term.termoAnterior && term.termoAnterior !== term.termo) {
         return `${term.termo} (${term.termoAnterior})`;
       }
 
@@ -840,6 +958,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
       if (term.parentId === finalParentId) return;
 
+      ensureOriginal(term);
       term.parentId = finalParentId;
       markModified(term);
 
@@ -999,6 +1118,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
       const deleteButtonLabel = term.revisao === REVIEW_EXCLUIR ? "Cancelar sugestão de exclusão" : "Sugerir exclusão";
       const deleteButtonClass = term.revisao === REVIEW_EXCLUIR ? "success" : "danger";
+      const pendingCount = getPendingTerms().length;
 
       termArea.innerHTML = `
         <div class="term-header">
@@ -1011,6 +1131,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           <button class="tab active" data-tab="cadastro">Cadastro</button>
           <button class="tab" data-tab="relacoes">Relacionamentos</button>
           <button class="tab" data-tab="comentarios">Comentários (${comments.filter(c => !c.resolved).length} abertos)</button>
+          <button class="tab" data-tab="pendencias">Pendências (${pendingCount})</button>
         </div>
 
         <div id="cadastro" class="panel active">
@@ -1081,9 +1202,99 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
             ${comments.length ? comments.map(renderCommentHtml).join("") : '<div class="empty">Nenhum comentário para este termo.</div>'}
           </div>
         </div>
+
+        <div id="pendencias" class="panel">
+          ${renderPendingPanel()}
+        </div>
       `;
 
       wireTermArea(term);
+    }
+
+    function getTermNameForSummary(id) {
+      if (!id) return "Sem termo geral";
+      const term = getTerm(id);
+      return term ? displayTermName(term) : "Termo não encontrado";
+    }
+
+    function renderPendingSummary(term) {
+      if (term.revisao === REVIEW_NOVO) {
+        return `<ul class="pending-summary"><li>Novo termo em: ${escapeHtml(getTermNameForSummary(term.parentId))}</li></ul>`;
+      }
+
+      if (term.revisao === REVIEW_EXCLUIR) {
+        return `<ul class="pending-summary"><li>Exclusão sugerida para este termo.</li></ul>`;
+      }
+
+      const original = term.original;
+      if (!original) {
+        return `<ul class="pending-summary"><li>Alteração registrada sem cópia anterior disponível.</li></ul>`;
+      }
+
+      const changes = [];
+
+      if ((original.termo || "") !== (term.termo || "")) {
+        changes.push(`Nome: ${escapeHtml(original.termo || "")} → ${escapeHtml(term.termo || "")}`);
+      }
+
+      if ((original.parentId || null) !== (term.parentId || null)) {
+        changes.push(`Termo geral: ${escapeHtml(getTermNameForSummary(original.parentId))} → ${escapeHtml(getTermNameForSummary(term.parentId))}`);
+      }
+
+      if ((original.conceito || "") !== (term.conceito || "")) {
+        changes.push("Conceito alterado");
+      }
+
+      if ((original.definicao || "") !== (term.definicao || "")) {
+        changes.push("Definição alterada");
+      }
+
+      if ((original.notaEscopo || "") !== (term.notaEscopo || "")) {
+        changes.push("Nota de escopo alterada");
+      }
+
+      if ((original.notaUso || "") !== (term.notaUso || "")) {
+        changes.push("Nota de uso alterada");
+      }
+
+      if (JSON.stringify(original.relacionados || []) !== JSON.stringify(term.relacionados || [])) {
+        changes.push("Termos relacionados alterados");
+      }
+
+      if (!changes.length) {
+        changes.push("Alteração registrada.");
+      }
+
+      return `<ul class="pending-summary">${changes.map(change => `<li>${change}</li>`).join("")}</ul>`;
+    }
+
+    function renderPendingPanel() {
+      const pending = getPendingTerms();
+
+      if (!pending.length) {
+        return '<div class="empty">Não há pendências para deliberar.</div>';
+      }
+
+      return `
+        <div class="pending-list">
+          ${pending.map(term => `
+            <div class="pending-card review-${term.revisao}">
+              <div class="pending-title">
+                <span class="review-badge ${term.revisao}">${escapeHtml(reviewLabel(term.revisao))}</span>
+                <strong>${escapeHtml(displayTermName(term))}</strong>
+              </div>
+              <div class="muted">${escapeHtml(termPath(term))}</div>
+              ${term.revisaoPor || term.revisaoEm ? `<div class="muted">Registrado por ${escapeHtml(term.revisaoPor || "Usuário")} ${term.revisaoEm ? `em ${escapeHtml(term.revisaoEm)}` : ""}</div>` : ""}
+              ${renderPendingSummary(term)}
+              <div class="toolbar">
+                <button data-pending-action="view" data-term-id="${term.id}">Ver termo</button>
+                <button class="success" data-pending-action="approve" data-term-id="${term.id}">Aprovar</button>
+                <button class="danger" data-pending-action="reject" data-term-id="${term.id}">Rejeitar</button>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      `;
     }
 
     function parentOptions(currentId, selectedParentId) {
@@ -1163,15 +1374,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       if (saveBtn) {
         saveBtn.onclick = async () => {
           const oldParentId = term.parentId;
-
-          const oldValues = {
-            termo: term.termo,
-            conceito: term.conceito,
-            definicao: term.definicao,
-            notaEscopo: term.notaEscopo,
-            notaUso: term.notaUso,
-            parentId: term.parentId
-          };
+          const before = snapshotTerm(term);
 
           const novoTermo = document.getElementById("editTermo").value.trim() || term.termo;
 
@@ -1189,9 +1392,12 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           term.notaUso = document.getElementById("editNotaUso").value.trim();
           term.parentId = document.getElementById("editParent").value || null;
 
-          const changed = Object.keys(oldValues).some(key => oldValues[key] !== term[key]);
+          const changed = JSON.stringify(before) !== JSON.stringify(snapshotTerm(term));
 
           if (changed) {
+            if (term.revisao !== REVIEW_NOVO && term.revisao !== REVIEW_EXCLUIR && !term.original) {
+              term.original = before;
+            }
             markModified(term);
           }
 
@@ -1211,9 +1417,11 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       if (suggestDeleteBtn) {
         suggestDeleteBtn.onclick = async () => {
           if (term.revisao === REVIEW_EXCLUIR) {
-            term.revisao = REVIEW_ORIGINAL;
+            clearReview(term);
           } else {
+            ensureOriginal(term);
             term.revisao = REVIEW_EXCLUIR;
+            registerReviewMetadata(term);
           }
           await saveState();
           render();
@@ -1223,7 +1431,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       const clearReviewBtn = document.getElementById("clearReviewBtn");
       if (clearReviewBtn) {
         clearReviewBtn.onclick = async () => {
-          term.revisao = REVIEW_ORIGINAL;
+          clearReview(term);
           await saveState();
           render();
         };
@@ -1235,6 +1443,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           const relatedId = document.getElementById("addRelatedSelect").value;
           if (!relatedId) return;
 
+          ensureOriginal(term);
           term.relacionados = term.relacionados || [];
           if (!term.relacionados.includes(relatedId)) term.relacionados.push(relatedId);
 
@@ -1293,6 +1502,90 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           setActiveTab("comentarios");
         };
       });
+
+      document.querySelectorAll("[data-pending-action]").forEach(btn => {
+        btn.onclick = async () => {
+          const termId = btn.dataset.termId;
+          const action = btn.dataset.pendingAction;
+
+          if (action === "view") {
+            state.selectedId = termId;
+            await saveState();
+            render();
+            setActiveTab("cadastro");
+            return;
+          }
+
+          if (action === "approve") {
+            await approvePending(termId);
+            return;
+          }
+
+          if (action === "reject") {
+            await rejectPending(termId);
+          }
+        };
+      });
+    }
+
+    function removeTermCompletely(termId) {
+      state.terms = state.terms.filter(t => t.id !== termId);
+      state.comments = state.comments.filter(c => c.termId !== termId);
+      state.terms.forEach(t => {
+        t.relacionados = (t.relacionados || []).filter(id => id !== termId);
+      });
+
+      if (state.selectedId === termId) {
+        state.selectedId = state.terms[0]?.id || null;
+      }
+    }
+
+    async function approvePending(termId) {
+      const term = getTerm(termId);
+      if (!term) return;
+
+      if (term.revisao === REVIEW_EXCLUIR) {
+        if (childrenOf(term.id).length) {
+          alert("Não é possível aprovar a exclusão de termo com termos específicos. Mova ou delibere os filhos primeiro.");
+          return;
+        }
+
+        if (!confirm(`Aprovar a exclusão definitiva do termo "${displayTermName(term)}"?`)) return;
+        removeTermCompletely(term.id);
+      } else {
+        clearReview(term);
+        term.termoAnterior = "";
+      }
+
+      await saveState();
+      render();
+      setActiveTab("pendencias");
+    }
+
+    async function rejectPending(termId) {
+      const term = getTerm(termId);
+      if (!term) return;
+
+      if (term.revisao === REVIEW_NOVO) {
+        if (childrenOf(term.id).length) {
+          alert("Não é possível rejeitar termo novo com termos específicos. Delibere ou mova os filhos primeiro.");
+          return;
+        }
+
+        if (!confirm(`Rejeitar e remover o termo novo "${displayTermName(term)}"?`)) return;
+        removeTermCompletely(term.id);
+      } else if (term.revisao === REVIEW_MODIFICADO) {
+        if (term.original) {
+          restoreTermFromOriginal(term);
+        }
+        clearReview(term);
+      } else if (term.revisao === REVIEW_EXCLUIR) {
+        clearReview(term);
+      }
+
+      await saveState();
+      render();
+      setActiveTab("pendencias");
     }
 
     function setActiveTab(tabId) {
@@ -1322,7 +1615,10 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         notaEscopo: "",
         notaUso: "",
         relacionados: [],
-        revisao: REVIEW_NOVO
+        revisao: REVIEW_NOVO,
+        original: null,
+        revisaoPor: currentUser.value.trim() || "Usuário",
+        revisaoEm: nowLabel()
       });
 
       if (parentId && !state.expanded.includes(parentId)) state.expanded.push(parentId);
@@ -1500,7 +1796,10 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           notaEscopo,
           notaUso,
           relacionados: [],
-          revisao: REVIEW_ORIGINAL
+          revisao: REVIEW_ORIGINAL,
+          original: null,
+          revisaoPor: "",
+          revisaoEm: ""
         });
 
         const paths = getHierarchyPathsFromXml(element);
@@ -1526,7 +1825,10 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
                   notaEscopo: "",
                   notaUso: "",
                   relacionados: [],
-                  revisao: REVIEW_ORIGINAL
+                  revisao: REVIEW_ORIGINAL,
+                  original: null,
+                  revisaoPor: "",
+                  revisaoEm: ""
                 });
               }
               previousId = pathId;
