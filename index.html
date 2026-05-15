@@ -520,6 +520,10 @@
         <span><i class="legend-mark red"></i> exclusão sugerida</span>
       </div>
 
+      <div class="toolbar" style="margin-bottom: 8px;">
+        <button id="collapseToClassesBtn">Recolher para classes</button>
+      </div>
+
       <div id="tree" class="tree-box"></div>
 
       <div class="add-box">
@@ -671,6 +675,7 @@
     const splitter = document.getElementById("splitter");
     const LAYOUT_KEY = "tesauro_left_width";
     const clearSearchBtn = document.getElementById("clearSearchBtn");
+    const collapseToClassesBtn = document.getElementById("collapseToClassesBtn");
     const termArea = document.getElementById("termArea");
     const newTerm = document.getElementById("newTerm");
     const newParent = document.getElementById("newParent");
@@ -882,6 +887,22 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
     function childrenOf(parentId) {
       return childrenByParent.get(parentKey(parentId)) || [];
+    }
+
+    function rootTermIds() {
+      return state.terms
+        .filter(term => !term.parentId)
+        .map(term => term.id);
+    }
+
+    function expandOnlyClasses() {
+      state.expanded = rootTermIds();
+    }
+
+    function collapseTreeToClasses() {
+      searchInput.value = "";
+      expandOnlyClasses();
+      render();
     }
 
     function termPath(term) {
@@ -2624,6 +2645,7 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
       render();
     });
 
+    collapseToClassesBtn.addEventListener("click", collapseTreeToClasses);
     searchInput.addEventListener("input", renderTree);
     clearSearchBtn.addEventListener("click", () => {
       searchInput.value = "";
@@ -2661,6 +2683,7 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
 
       const atualizadoPeloTxt = await importarIcmgGithubSeNecessario();
 
+      expandOnlyClasses();
       render();
 
       if (!atualizadoPeloTxt) {
