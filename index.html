@@ -1115,10 +1115,6 @@ function renderOriginalSummary(term) {
     linhas.push("Definição alterada");
   }
 
-  if ((term.original.conceito || "") !== (term.conceito || "")) {
-    linhas.push("Conceito alterado");
-  }
-
   if ((term.original.notaEscopo || "") !== (term.notaEscopo || "")) {
     linhas.push("Nota Explicativa alterada");
   }
@@ -1374,10 +1370,6 @@ function renderOriginalSummary(term) {
               <input id="editTermo" value="${escapeAttr(term.termo)}" />
             </div>
             <div class="field full">
-              <label>Conceito</label>
-              <textarea id="editConceito">${escapeHtml(term.conceito || "")}</textarea>
-            </div>
-            <div class="field full">
               <label>Definição</label>
               <textarea id="editDefinicao">${escapeHtml(term.definicao || "")}</textarea>
             </div>
@@ -1478,9 +1470,6 @@ function renderOriginalSummary(term) {
         changes.push(`Termo geral: ${escapeHtml(getTermNameForSummary(original.parentId))} → ${escapeHtml(getTermNameForSummary(term.parentId))}`);
       }
 
-      if ((original.conceito || "") !== (term.conceito || "")) {
-        changes.push("Conceito alterado");
-      }
 
       if ((original.definicao || "") !== (term.definicao || "")) {
         changes.push("Definição alterada");
@@ -1632,7 +1621,6 @@ function renderOriginalSummary(term) {
             term.termo = novoTermo;
           }
 
-          term.conceito = document.getElementById("editConceito").value.trim();
           term.definicao = document.getElementById("editDefinicao").value.trim();
           term.notaEscopo = document.getElementById("editNotaEscopo").value.trim();
           term.notaUso = document.getElementById("editNotaUso").value.trim();
