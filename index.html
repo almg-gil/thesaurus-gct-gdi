@@ -1428,22 +1428,22 @@ function renderOriginalSummary(term) {
             ${naoAutorizados.length ? `<ul class="small-list">${naoAutorizados.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
             </div>
 
-        <div id="comentarios" class="panel">
-          <div class="field">
-            <label>Novo comentário</label>
-            <textarea id="newCommentText" placeholder="Escreva uma observação sobre este termo..."></textarea>
-          </div>
-          <button id="addCommentBtn" class="primary">Adicionar comentário</button>
-          <hr>
-          <div id="commentsList">
-            ${comments.length ? comments.map(renderCommentHtml).join("") : '<div class="empty">Nenhum comentário para este termo.</div>'}
-          </div>
-        </div>
+            <div id="comentarios" class="panel">
+              <div class="field">
+                <label>Novo comentário</label>
+                <textarea id="newCommentText" placeholder="Escreva uma observação sobre este termo..."></textarea>
+              </div>
+              <button id="addCommentBtn" class="primary">Adicionar comentário</button>
+              <hr>
+              <div id="commentsList">
+                ${comments.length ? comments.map(renderCommentHtml).join("") : '<div class="empty">Nenhum comentário para este termo.</div>'}
+              </div>
+            </div>
 
-        <div id="pendencias" class="panel">
-          ${renderPendingPanel(term)}
-          </div>
-      `;
+            <div id="pendencias" class="panel">
+              ${renderPendingPanel(term)}
+              </div>
+          `;
 
       wireTermArea(term);
     }
