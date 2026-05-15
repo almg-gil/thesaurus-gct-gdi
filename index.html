@@ -12,8 +12,11 @@
       --soft: #f7f7f7;
       --selected: #e8f0fe;
       --blue: #1f5fbf;
-      --danger: #a83232;
-      --ok: #267a3e;
+      --green: #1f7a3a;
+      --red: #a83232;
+      --blue-bg: #edf4ff;
+      --green-bg: #edf8f0;
+      --red-bg: #fff0f0;
     }
 
     * { box-sizing: border-box; }
@@ -66,12 +69,12 @@
 
     button.danger {
       border-color: #c9a0a0;
-      color: var(--danger);
+      color: var(--red);
     }
 
     button.success {
       border-color: #9ac9a5;
-      color: var(--ok);
+      color: var(--green);
     }
 
     .app {
@@ -123,6 +126,22 @@
       background: #fff;
     }
 
+    .root-drop {
+      border: 1px dashed #bbb;
+      border-radius: 4px;
+      padding: 5px 7px;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      background: #fafafa;
+    }
+
+    .root-drop.drag-over {
+      border-color: var(--blue);
+      background: var(--selected);
+      color: var(--blue);
+    }
+
     .tree-item {
       display: flex;
       align-items: center;
@@ -131,6 +150,7 @@
       padding: 1px 4px;
       border-radius: 4px;
       white-space: nowrap;
+      border-left: 4px solid transparent;
     }
 
     .tree-item:hover { background: #f5f5f5; }
@@ -139,6 +159,27 @@
       background: var(--selected);
       color: #0b3d91;
       font-weight: bold;
+    }
+
+    .tree-item.drag-over {
+      outline: 1px dashed var(--blue);
+      background: var(--selected);
+    }
+
+    .tree-item.review-modificado {
+      border-left-color: var(--blue);
+      background: var(--blue-bg);
+    }
+
+    .tree-item.review-novo {
+      border-left-color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .tree-item.review-excluir {
+      border-left-color: var(--red);
+      background: var(--red-bg);
+      color: var(--red);
     }
 
     .toggle {
@@ -156,6 +197,19 @@
       background: transparent;
       padding: 3px;
     }
+
+    .review-badge {
+      font-size: 11px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: #fff;
+    }
+
+    .review-badge.modificado { color: var(--blue); border-color: var(--blue); }
+    .review-badge.novo { color: var(--green); border-color: var(--green); }
+    .review-badge.excluir { color: var(--red); border-color: var(--red); }
 
     .add-box {
       margin-top: 12px;
@@ -201,6 +255,32 @@
       color: var(--muted);
       font-size: 12px;
     }
+
+    .legend {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 8px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .legend-mark {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .legend-mark.blue { background: var(--blue); }
+    .legend-mark.green { background: var(--green); }
+    .legend-mark.red { background: var(--red); }
 
     .tabs {
       display: flex;
@@ -316,6 +396,12 @@
         <button id="clearSearchBtn">limpar</button>
       </div>
 
+      <div class="legend">
+        <span><i class="legend-mark blue"></i> alterado</span>
+        <span><i class="legend-mark green"></i> novo</span>
+        <span><i class="legend-mark red"></i> exclusão sugerida</span>
+      </div>
+
       <div id="tree" class="tree-box"></div>
 
       <div class="add-box">
@@ -368,6 +454,11 @@
     const ALMG_PAGE_SIZE = 1000;
     const ALMG_DELAY_MS = 1100;
 
+    const REVIEW_ORIGINAL = "original";
+    const REVIEW_MODIFICADO = "modificado";
+    const REVIEW_NOVO = "novo";
+    const REVIEW_EXCLUIR = "excluir";
+
     const exemplo = {
       selectedId: "comunicacao",
       expanded: ["tema", "administracao", "comunicacao"],
@@ -376,88 +467,74 @@
           id: "tema",
           parentId: null,
           termo: "Tema",
-          status: "publicado",
+          conceito: "",
           definicao: "Categoria geral para organização inicial do vocabulário.",
           notaEscopo: "Use como raiz para grandes áreas temáticas.",
           notaUso: "Não usar diretamente na indexação.",
-          relacionados: []
+          relacionados: [],
+          revisao: REVIEW_ORIGINAL
         },
         {
           id: "administracao",
           parentId: "tema",
           termo: "Administração Pública",
-          status: "em revisão",
+          conceito: "",
           definicao: "Atividades de organização, gestão e funcionamento da administração pública.",
           notaEscopo: "Usar para temas gerais de gestão pública.",
           notaUso: "",
-          relacionados: ["servidor-publico"]
+          relacionados: ["servidor-publico"],
+          revisao: REVIEW_ORIGINAL
         },
         {
           id: "comunicacao",
           parentId: "tema",
           termo: "Comunicação",
-          status: "em revisão",
+          conceito: "",
           definicao: "Processo de envio, transmissão e recepção de mensagens entre emissor e destinatário.",
           notaEscopo: "Usar para assuntos relativos à comunicação institucional, social ou tecnológica.",
           notaUso: "Quando o enfoque for publicidade oficial, avaliar termo específico.",
-          relacionados: ["transparencia"]
+          relacionados: ["transparencia"],
+          revisao: REVIEW_ORIGINAL
         },
         {
           id: "educacao",
           parentId: "tema",
           termo: "Educação",
-          status: "em revisão",
+          conceito: "",
           definicao: "Políticas, instituições e práticas educacionais.",
           notaEscopo: "",
           notaUso: "",
-          relacionados: []
+          relacionados: [],
+          revisao: REVIEW_ORIGINAL
         },
         {
           id: "servidor-publico",
           parentId: "administracao",
           termo: "Servidor público",
-          status: "candidato",
+          conceito: "",
           definicao: "Pessoa legalmente investida em cargo público.",
           notaEscopo: "",
           notaUso: "",
-          relacionados: ["administracao"]
+          relacionados: ["administracao"],
+          revisao: REVIEW_ORIGINAL
         },
         {
           id: "transparencia",
           parentId: "administracao",
           termo: "Transparência administrativa",
-          status: "candidato",
+          conceito: "",
           definicao: "Disponibilização de informações públicas para controle social e institucional.",
           notaEscopo: "",
           notaUso: "",
-          relacionados: ["comunicacao"]
+          relacionados: ["comunicacao"],
+          revisao: REVIEW_ORIGINAL
         }
       ],
-      comments: [
-        {
-          id: "c1",
-          termId: "comunicacao",
-          author: "João",
-          text: "Rever a definição para diferenciar comunicação institucional de comunicação social.",
-          createdAt: "2026-05-13 09:10",
-          resolved: false,
-          resolvedBy: null,
-          resolvedAt: null
-        },
-        {
-          id: "c2",
-          termId: "comunicacao",
-          author: "Ana",
-          text: "Verificar se 'publicidade' deve ser termo específico ou relacionado.",
-          createdAt: "2026-05-13 10:20",
-          resolved: true,
-          resolvedBy: "Maria",
-          resolvedAt: "2026-05-13 11:00"
-        }
-      ]
+      comments: []
     };
 
     let state = structuredClone(exemplo);
+    let draggedTermId = null;
 
     const treeEl = document.getElementById("tree");
     const searchInput = document.getElementById("searchInput");
@@ -498,6 +575,13 @@ O app usará os dados de exemplo.`);
       return normalizeState(data?.payload);
     }
 
+    function normalizeReview(term) {
+      const valid = [REVIEW_ORIGINAL, REVIEW_MODIFICADO, REVIEW_NOVO, REVIEW_EXCLUIR];
+      if (valid.includes(term.revisao)) return term.revisao;
+      if (term.status === "candidato") return REVIEW_NOVO;
+      return REVIEW_ORIGINAL;
+    }
+
     function normalizeState(payload) {
       let parsed = payload;
 
@@ -514,21 +598,24 @@ O app usará os dados de exemplo.`);
       }
 
       parsed.comments = Array.isArray(parsed.comments) ? parsed.comments : [];
-      parsed.expanded = Array.isArray(parsed.expanded) ? parsed.expanded : [];
+      parsed.expanded = Array.isArray(parsed.expanded) ? parsed.expanded.map(String) : [];
 
       parsed.terms = parsed.terms.map(term => ({
         id: String(term.id || uid("term")),
         parentId: term.parentId ? String(term.parentId) : null,
         termo: term.termo || "Sem termo",
-        status: term.status || "candidato",
+        conceito: term.conceito || "",
         definicao: term.definicao || "",
         notaEscopo: term.notaEscopo || "",
         notaUso: term.notaUso || "",
-        relacionados: Array.isArray(term.relacionados) ? term.relacionados.map(String) : []
+        relacionados: Array.isArray(term.relacionados) ? term.relacionados.map(String) : [],
+        revisao: normalizeReview(term)
       }));
 
       if (!parsed.selectedId || !parsed.terms.some(t => t.id === parsed.selectedId)) {
         parsed.selectedId = parsed.terms[0]?.id || null;
+      } else {
+        parsed.selectedId = String(parsed.selectedId);
       }
 
       return parsed;
@@ -591,6 +678,19 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       return parts.reverse().join(" / ");
     }
 
+    function markModified(term) {
+      if (!term) return;
+      if (term.revisao === REVIEW_NOVO || term.revisao === REVIEW_EXCLUIR) return;
+      term.revisao = REVIEW_MODIFICADO;
+    }
+
+    function reviewLabel(revisao) {
+      if (revisao === REVIEW_MODIFICADO) return "alterado";
+      if (revisao === REVIEW_NOVO) return "novo";
+      if (revisao === REVIEW_EXCLUIR) return "exclusão sugerida";
+      return "original";
+    }
+
     function hasMatchingDescendant(term, query) {
       if (!query) return true;
       if (matchesTerm(term, query)) return true;
@@ -598,19 +698,80 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
     }
 
     function matchesTerm(term, query) {
-      const text = [term.termo, term.definicao, term.notaEscopo, term.notaUso]
+      const text = [term.termo, term.conceito, term.definicao, term.notaEscopo, term.notaUso]
         .join(" ")
         .toLowerCase();
       return text.includes(query.toLowerCase());
     }
 
+    function canMoveTerm(dragId, newParentId) {
+      if (!dragId) return false;
+      if (dragId === newParentId) return false;
+
+      let current = getTerm(newParentId);
+      const guard = new Set();
+
+      while (current && !guard.has(current.id)) {
+        guard.add(current.id);
+        if (current.id === dragId) return false;
+        current = getTerm(current.parentId);
+      }
+
+      return true;
+    }
+
+    async function moveTerm(dragId, newParentId) {
+      const term = getTerm(dragId);
+      if (!term) return;
+
+      const finalParentId = newParentId || null;
+
+      if (!canMoveTerm(dragId, finalParentId)) {
+        alert("Movimento inválido: não é possível mover um termo para dentro dele mesmo ou de um descendente.");
+        return;
+      }
+
+      if (term.parentId === finalParentId) return;
+
+      term.parentId = finalParentId;
+      markModified(term);
+
+      if (finalParentId && !state.expanded.includes(finalParentId)) {
+        state.expanded.push(finalParentId);
+      }
+
+      state.selectedId = term.id;
+      await saveState();
+      render();
+    }
+
     function renderTree() {
       const query = searchInput.value.trim();
       treeEl.innerHTML = "";
+
+      const rootDrop = document.createElement("div");
+      rootDrop.className = "root-drop";
+      rootDrop.textContent = "Solte aqui para mover para a raiz";
+      rootDrop.addEventListener("dragover", e => {
+        e.preventDefault();
+        rootDrop.classList.add("drag-over");
+      });
+      rootDrop.addEventListener("dragleave", () => rootDrop.classList.remove("drag-over"));
+      rootDrop.addEventListener("drop", async e => {
+        e.preventDefault();
+        rootDrop.classList.remove("drag-over");
+        if (draggedTermId) await moveTerm(draggedTermId, null);
+        draggedTermId = null;
+      });
+      treeEl.appendChild(rootDrop);
+
       const roots = childrenOf(null);
 
       if (!roots.length) {
-        treeEl.innerHTML = '<div class="empty">Nenhum termo cadastrado.</div>';
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "Nenhum termo cadastrado.";
+        treeEl.appendChild(empty);
         return;
       }
 
@@ -623,8 +784,37 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       const children = childrenOf(term.id);
       const expanded = state.expanded.includes(term.id) || Boolean(query);
       const item = document.createElement("div");
-      item.className = "tree-item" + (term.id === state.selectedId ? " selected" : "");
+      item.className = `tree-item review-${term.revisao || REVIEW_ORIGINAL}` + (term.id === state.selectedId ? " selected" : "");
       item.style.paddingLeft = `${level * 18 + 4}px`;
+      item.draggable = true;
+      item.title = "Arraste para mover este termo para outra hierarquia";
+
+      item.addEventListener("dragstart", e => {
+        draggedTermId = term.id;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", term.id);
+      });
+
+      item.addEventListener("dragover", e => {
+        e.preventDefault();
+        item.classList.add("drag-over");
+      });
+
+      item.addEventListener("dragleave", () => item.classList.remove("drag-over"));
+
+      item.addEventListener("drop", async e => {
+        e.preventDefault();
+        e.stopPropagation();
+        item.classList.remove("drag-over");
+        const draggedId = e.dataTransfer.getData("text/plain") || draggedTermId;
+        await moveTerm(draggedId, term.id);
+        draggedTermId = null;
+      });
+
+      item.addEventListener("dragend", () => {
+        draggedTermId = null;
+        document.querySelectorAll(".drag-over").forEach(el => el.classList.remove("drag-over"));
+      });
 
       const toggle = document.createElement("button");
       toggle.className = "toggle";
@@ -655,6 +845,14 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
       item.appendChild(toggle);
       item.appendChild(label);
+
+      if (term.revisao && term.revisao !== REVIEW_ORIGINAL) {
+        const badge = document.createElement("span");
+        badge.className = `review-badge ${term.revisao}`;
+        badge.textContent = reviewLabel(term.revisao);
+        item.appendChild(badge);
+      }
+
       treeEl.appendChild(item);
 
       if (expanded) {
@@ -666,6 +864,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       newParent.innerHTML = '<option value="">Sem termo geral</option>';
 
       state.terms
+        .filter(t => t.revisao !== REVIEW_EXCLUIR)
         .slice()
         .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
         .forEach(term => {
@@ -691,10 +890,14 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       const comments = state.comments.filter(c => c.termId === term.id)
         .sort((a, b) => Number(a.resolved) - Number(b.resolved) || String(b.createdAt).localeCompare(String(a.createdAt)));
 
+      const deleteButtonLabel = term.revisao === REVIEW_EXCLUIR ? "Cancelar sugestão de exclusão" : "Sugerir exclusão";
+      const deleteButtonClass = term.revisao === REVIEW_EXCLUIR ? "success" : "danger";
+
       termArea.innerHTML = `
         <div class="term-header">
           <h1>${escapeHtml(term.termo)}</h1>
           <div class="muted">${escapeHtml(termPath(term))}</div>
+          <div class="muted">Situação: <strong>${escapeHtml(reviewLabel(term.revisao))}</strong></div>
         </div>
 
         <div class="tabs">
@@ -710,6 +913,10 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
               <input id="editTermo" value="${escapeAttr(term.termo)}" />
             </div>
             <div class="field full">
+              <label>Conceito</label>
+              <textarea id="editConceito">${escapeHtml(term.conceito || "")}</textarea>
+            </div>
+            <div class="field full">
               <label>Definição</label>
               <textarea id="editDefinicao">${escapeHtml(term.definicao || "")}</textarea>
             </div>
@@ -721,13 +928,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
               <label>Nota de uso</label>
               <textarea id="editNotaUso">${escapeHtml(term.notaUso || "")}</textarea>
             </div>
-            <div class="field">
-              <label>Status</label>
-              <select id="editStatus">
-                ${statusOptions(term.status)}
-              </select>
-            </div>
-            <div class="field">
+            <div class="field full">
               <label>Termo geral</label>
               <select id="editParent">
                 ${parentOptions(term.id, term.parentId)}
@@ -736,7 +937,8 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           </div>
           <div class="toolbar">
             <button id="saveTermBtn" class="primary">Salvar alterações</button>
-            <button id="deleteTermBtn" class="danger">Excluir termo</button>
+            <button id="suggestDeleteBtn" class="${deleteButtonClass}">${deleteButtonLabel}</button>
+            <button id="clearReviewBtn">Limpar marcação</button>
           </div>
         </div>
 
@@ -748,7 +950,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           <div class="relation-box">
             <strong>Termos específicos</strong>
-            ${children.length ? `<ul class="small-list">${children.map(c => `<li>${escapeHtml(c.termo)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
+            ${children.length ? `<ul class="small-list">${children.map(c => `<li>${escapeHtml(c.termo)} ${c.revisao !== REVIEW_ORIGINAL ? `<span class="review-badge ${c.revisao}">${reviewLabel(c.revisao)}</span>` : ""}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
           </div>
 
           <div class="relation-box">
@@ -777,17 +979,11 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       wireTermArea(term);
     }
 
-    function statusOptions(current) {
-      return ["candidato", "em revisão", "aprovado", "publicado", "obsoleto"]
-        .map(s => `<option value="${s}" ${s === current ? "selected" : ""}>${s}</option>`)
-        .join("");
-    }
-
     function parentOptions(currentId, selectedParentId) {
       const options = ['<option value="">Sem termo geral</option>'];
 
       state.terms
-        .filter(t => t.id !== currentId && !isDescendantOf(t.id, currentId))
+        .filter(t => t.id !== currentId && t.revisao !== REVIEW_EXCLUIR && !isDescendantOf(t.id, currentId))
         .slice()
         .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
         .forEach(t => {
@@ -803,7 +999,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       const options = ['<option value="">Selecione um termo</option>'];
 
       state.terms
-        .filter(t => t.id !== currentId && !selected.has(t.id))
+        .filter(t => t.id !== currentId && t.revisao !== REVIEW_EXCLUIR && !selected.has(t.id))
         .slice()
         .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
         .forEach(t => options.push(`<option value="${t.id}">${escapeHtml(termPath(t))}</option>`));
@@ -835,6 +1031,8 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
             <div><strong>${escapeHtml(c.author)}</strong> <span class="muted">· ${escapeHtml(c.createdAt)}</span></div>
             <span class="status-pill ${statusClass}">${statusLabel}</span>
           </div>
+          <div>${escapeHtml(c.text || "").replace(/
+/g, "<br>")}</div>
           ${footer}
           <div class="toolbar">
             ${c.resolved
@@ -858,31 +1056,52 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       const saveBtn = document.getElementById("saveTermBtn");
       if (saveBtn) {
         saveBtn.onclick = async () => {
+          const oldParentId = term.parentId;
+          const oldValues = {
+            termo: term.termo,
+            conceito: term.conceito,
+            definicao: term.definicao,
+            notaEscopo: term.notaEscopo,
+            notaUso: term.notaUso,
+            parentId: term.parentId
+          };
+
           term.termo = document.getElementById("editTermo").value.trim() || term.termo;
+          term.conceito = document.getElementById("editConceito").value.trim();
           term.definicao = document.getElementById("editDefinicao").value.trim();
           term.notaEscopo = document.getElementById("editNotaEscopo").value.trim();
           term.notaUso = document.getElementById("editNotaUso").value.trim();
-          term.status = document.getElementById("editStatus").value;
           term.parentId = document.getElementById("editParent").value || null;
+
+          const changed = Object.keys(oldValues).some(key => oldValues[key] !== term[key]);
+          if (changed) markModified(term);
+
+          if (term.parentId && term.parentId !== oldParentId && !state.expanded.includes(term.parentId)) {
+            state.expanded.push(term.parentId);
+          }
+
           await saveState();
           render();
         };
       }
 
-      const deleteBtn = document.getElementById("deleteTermBtn");
-      if (deleteBtn) {
-        deleteBtn.onclick = async () => {
-          if (childrenOf(term.id).length) {
-            alert("Não é possível excluir termo com termos específicos. Mova ou exclua os filhos primeiro.");
-            return;
+      const suggestDeleteBtn = document.getElementById("suggestDeleteBtn");
+      if (suggestDeleteBtn) {
+        suggestDeleteBtn.onclick = async () => {
+          if (term.revisao === REVIEW_EXCLUIR) {
+            term.revisao = REVIEW_ORIGINAL;
+          } else {
+            term.revisao = REVIEW_EXCLUIR;
           }
-          if (!confirm(`Excluir o termo "${term.termo}"?`)) return;
-          state.terms = state.terms.filter(t => t.id !== term.id);
-          state.comments = state.comments.filter(c => c.termId !== term.id);
-          state.terms.forEach(t => {
-            t.relacionados = (t.relacionados || []).filter(id => id !== term.id);
-          });
-          state.selectedId = state.terms[0]?.id || null;
+          await saveState();
+          render();
+        };
+      }
+
+      const clearReviewBtn = document.getElementById("clearReviewBtn");
+      if (clearReviewBtn) {
+        clearReviewBtn.onclick = async () => {
+          term.revisao = REVIEW_ORIGINAL;
           await saveState();
           render();
         };
@@ -903,6 +1122,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
             if (!other.relacionados.includes(term.id)) other.relacionados.push(term.id);
           }
 
+          markModified(term);
           await saveState();
           render();
         };
@@ -974,11 +1194,12 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         id,
         parentId,
         termo: value,
-        status: "candidato",
+        conceito: "",
         definicao: "",
         notaEscopo: "",
         notaUso: "",
-        relacionados: []
+        relacionados: [],
+        revisao: REVIEW_NOVO
       });
 
       if (parentId && !state.expanded.includes(parentId)) state.expanded.push(parentId);
@@ -1019,15 +1240,11 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
     // ============================================================
     // Importação do Thesaurus ALMG
-    // Busca todas as páginas e filtra apenas <autorizado>true</autorizado>.
+    // Busca as páginas e filtra apenas <autorizado>true</autorizado>.
     // ============================================================
     function sameName(localName, names) {
       const normalized = String(localName || "").toLowerCase();
-
-      return names.some(name => {
-        const n = String(name || "").toLowerCase();
-        return normalized === n;
-      });
+      return names.some(name => String(name || "").toLowerCase() === normalized);
     }
 
     function getDirectChildElement(element, possibleNames) {
@@ -1062,29 +1279,17 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
     function makeSafeId(value) {
       const raw = String(value || "").trim();
-
-      if (!raw) {
-        return uid("almg");
-      }
+      if (!raw) return uid("almg");
 
       let safe = "";
-
       for (const char of raw) {
         const code = char.charCodeAt(0);
-
         const isNumber = code >= 48 && code <= 57;
         const isUpper = code >= 65 && code <= 90;
         const isLower = code >= 97 && code <= 122;
-        const isAllowed =
-          isNumber ||
-          isUpper ||
-          isLower ||
-          char === "_" ||
-          char === "-";
-
+        const isAllowed = isNumber || isUpper || isLower || char === "_" || char === "-";
         safe += isAllowed ? char : "-";
       }
-
       return "almg-" + safe;
     }
 
@@ -1129,7 +1334,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         }
       }
 
-      return [...new Set(paths)];
+      return Array.from(new Set(paths));
     }
 
     function xmlToTerms(xmlText) {
@@ -1154,7 +1359,6 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
         const rawId = getBestText(element, ["id", "codigo", "cod", "controle", "idTermo", "identificador"]);
         const termo = getBestText(element, ["termo", "descricao", "descritor", "nome", "nomeTermo"]);
-
         if (!termo) continue;
 
         const id = makeSafeId(rawId || termo);
@@ -1163,18 +1367,17 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         const notaEscopo = getBestText(element, ["notaEscopo", "notaDeEscopo", "escopo"]);
         const notaUso = getBestText(element, ["notaUso", "notaDeUso", "uso"]);
 
-        const term = {
+        authorized.push({
           id,
           parentId,
           termo,
-          status: "publicado",
+          conceito: "",
           definicao,
           notaEscopo,
           notaUso,
-          relacionados: []
-        };
-
-        authorized.push(term);
+          relacionados: [],
+          revisao: REVIEW_ORIGINAL
+        });
 
         const paths = getHierarchyPathsFromXml(element);
         for (const path of paths) {
@@ -1193,11 +1396,12 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
                   id: pathId,
                   parentId: previousId,
                   termo: part,
-                  status: "publicado",
+                  conceito: "",
                   definicao: "",
                   notaEscopo: "",
                   notaUso: "",
-                  relacionados: []
+                  relacionados: [],
+                  revisao: REVIEW_ORIGINAL
                 });
               }
               previousId = pathId;
@@ -1226,11 +1430,13 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         map.set(term.id, {
           ...current,
           ...term,
+          conceito: term.conceito || current.conceito || "",
           definicao: term.definicao || current.definicao || "",
           notaEscopo: term.notaEscopo || current.notaEscopo || "",
           notaUso: term.notaUso || current.notaUso || "",
           parentId: term.parentId || current.parentId || null,
-          relacionados: Array.from(new Set([...(current.relacionados || []), ...(term.relacionados || [])]))
+          relacionados: Array.from(new Set([...(current.relacionados || []), ...(term.relacionados || [])])),
+          revisao: current.revisao || term.revisao || REVIEW_ORIGINAL
         });
       }
 
@@ -1239,7 +1445,6 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
     function corrigirPaisInexistentes(terms) {
       const ids = new Set(terms.map(t => t.id));
-
       return terms.map(t => {
         if (!t.parentId || ids.has(t.parentId)) return t;
         return { ...t, parentId: null };
@@ -1259,14 +1464,11 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           headers: { "Accept": "application/xml,text/xml,*/*" }
         });
 
-        // A API pode devolver 400 quando a página solicitada não existe.
-        // Se isso acontecer depois de já termos importado algo, tratamos como fim.
         if (response.status === 400 || response.status === 404) {
           if (allAuthorized.length > 0 || allPathTerms.length > 0) {
             setStatus(`Fim da importação. Última página válida: ${pagina - 1}.`);
             break;
           }
-
           throw new Error(`Erro na primeira página: HTTP ${response.status}`);
         }
 
@@ -1280,39 +1482,24 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         allAuthorized = allAuthorized.concat(parsed.authorizedTerms);
         allPathTerms = allPathTerms.concat(parsed.pathDerivedTerms);
 
-        setStatus(
-          `Página ${pagina} importada. Termos autorizados até agora: ${allAuthorized.length}.`
-        );
+        setStatus(`Página ${pagina} importada. Termos autorizados até agora: ${allAuthorized.length}.`);
 
-        // Se não veio nenhum termo, acabou.
-        if (parsed.totalTermElements === 0) {
-          break;
-        }
-
-        // Se veio menos que o tamanho da página, provavelmente era a última página.
-        if (parsed.totalTermElements < ALMG_PAGE_SIZE) {
-          break;
-        }
+        if (parsed.totalTermElements === 0) break;
+        if (parsed.totalTermElements < ALMG_PAGE_SIZE) break;
 
         pagina += 1;
         await sleep(ALMG_DELAY_MS);
       }
 
-      setStatus(`Finalizando importação. Total de termos autorizados encontrados: ${allAuthorized.length}.`);
-
       const merged = mergeTermsById(allPathTerms.concat(allAuthorized));
       const corrigidos = corrigirPaisInexistentes(merged);
 
-      setStatus(
-        `Importação finalizada. Autorizados encontrados: ${allAuthorized.length}. Termos na árvore: ${corrigidos.length}.`
-      );
-
+      setStatus(`Importação finalizada. Autorizados encontrados: ${allAuthorized.length}. Termos na árvore: ${corrigidos.length}.`);
       return corrigidos;
-}
+    }
+
     async function importarThesaurusAlmg() {
-      if (!confirm("Importar termos autorizados do Thesaurus da ALMG? Isso substituirá os dados atuais do protótipo.")) {
-        return;
-      }
+      if (!confirm("Importar termos autorizados do Thesaurus da ALMG? Isso substituirá os dados atuais do protótipo.")) return;
 
       try {
         importAlmgBtn.disabled = true;
