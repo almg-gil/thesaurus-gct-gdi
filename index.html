@@ -50,6 +50,23 @@
       font-size: 13px;
     }
 
+    .top-actions {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+
+    .review-top-btn {
+      font-weight: bold;
+      border-color: var(--border);
+    }
+
+    .review-top-btn.has-pending {
+      border-color: var(--red);
+      color: var(--red);
+      background: var(--red-bg);
+    }
+
     input, textarea, select, button { font: inherit; }
 
     button {
@@ -472,13 +489,18 @@
   </style>
 </head>
 <body>
-  <header>
-    <strong>Tesauro GCT-GDI</strong>
-    <div class="user-area">
-      <span>Usuário:</span>
-      <input id="currentUser" type="text" value="Maria" aria-label="Usuário atual" />
-    </div>
-  </header>
+ <header>
+  <strong>Tesauro GCT-GDI</strong>
+
+  <div class="top-actions">
+    <button id="reviewTopBtn" class="review-top-btn">Ver pendências (0)</button>
+  </div>
+
+  <div class="user-area">
+    <span>Usuário:</span>
+    <input id="currentUser" type="text" value="Maria" aria-label="Usuário atual" />
+  </div>
+</header>
 
   <main class="app">
     <aside class="left">
@@ -629,8 +651,10 @@
 
     let state = structuredClone(exemplo);
     let draggedTermId = null;
+    let reviewMode = false;
 
     const treeEl = document.getElementById("tree");
+    const reviewTopBtn = document.getElementById("reviewTopBtn");
     const searchInput = document.getElementById("searchInput");
     const splitter = document.getElementById("splitter");
     const LAYOUT_KEY = "tesauro_left_width";
@@ -907,6 +931,145 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       if (revisao === REVIEW_EXCLUIR) return "exclusão sugerida";
       return "original";
     }
+
+    function pendingTerms() {
+      return state.terms.filter(t => t.revisao && t.revisao !== REVIEW_ORIGINAL);
+    }
+
+    function updateReviewTopButton() {
+      const count = pendingTerms().length;
+      reviewTopBtn.textContent = `Ver pendências (${count})`;
+      reviewTopBtn.classList.toggle("has-pending", count > 0);
+    }
+
+    function renderPendingArea() {
+      const pendencias = pendingTerms()
+        .slice()
+        .sort((a, b) => reviewLabel(a.revisao).localeCompare(reviewLabel(b.revisao), "pt-BR") || a.termo.localeCompare(b.termo, "pt-BR"));
+
+      termArea.innerHTML = `
+        <div class="term-header">
+          <h1>Pendências de revisão</h1>
+          <div class="muted">${pendencias.length} pendência(s) aguardando deliberação da biblioteca.</div>
+        </div>
+
+        <div class="toolbar">
+          <button id="backToTermBtn">Voltar ao termo selecionado</button>
+        </div>
+
+        <hr>
+
+        ${
+          pendencias.length
+            ? pendencias.map(renderPendingItemHtml).join("")
+            : '<div class="empty">Não há pendências de revisão.</div>'
+        }
+      `;
+
+      const backToTermBtn = document.getElementById("backToTermBtn");
+      if (backToTermBtn) {
+        backToTermBtn.onclick = () => {
+          reviewMode = false;
+          render();
+            };
+  }
+
+      document.querySelectorAll("[data-pending-action]").forEach(btn => {
+        btn.onclick = async () => {
+          const termId = btn.dataset.termId;
+          const action = btn.dataset.pendingAction;
+
+          if (action === "view") {
+            state.selectedId = termId;
+            reviewMode = false;
+            await saveState();
+            render();
+            return;
+          }
+
+          if (action === "approve") {
+            await approvePending(termId);
+            return;
+          }
+
+          if (action === "reject") {
+            await rejectPending(termId);
+            return;
+          }
+        };
+      });
+    }
+
+function renderPendingItemHtml(term) {
+  const tipo = reviewLabel(term.revisao);
+  const caminho = termPath(term);
+
+  return `
+    <div class="relation-box">
+      <div class="comment-head">
+        <div>
+          <strong>${escapeHtml(displayTermName(term))}</strong>
+          <div class="muted">${escapeHtml(caminho)}</div>
+        </div>
+        <span class="review-badge ${escapeAttr(term.revisao)}">${escapeHtml(tipo)}</span>
+      </div>
+
+      ${renderOriginalSummary(term)}
+
+      <div class="toolbar">
+        <button data-pending-action="view" data-term-id="${escapeAttr(term.id)}">Ver termo</button>
+        <button class="success" data-pending-action="approve" data-term-id="${escapeAttr(term.id)}">Aprovar</button>
+        <button class="danger" data-pending-action="reject" data-term-id="${escapeAttr(term.id)}">Rejeitar</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderOriginalSummary(term) {
+  if (!term.original) {
+    return "";
+  }
+
+  const originalParent = getTerm(term.original.parentId);
+  const currentParent = getTerm(term.parentId);
+
+  const linhas = [];
+
+  if (term.original.termo !== term.termo) {
+    linhas.push(`Nome anterior: ${term.original.termo}`);
+  }
+
+  if ((term.original.parentId || null) !== (term.parentId || null)) {
+    linhas.push(`Termo geral anterior: ${originalParent ? originalParent.termo : "Sem termo geral"}`);
+    linhas.push(`Termo geral atual: ${currentParent ? currentParent.termo : "Sem termo geral"}`);
+  }
+
+  if ((term.original.definicao || "") !== (term.definicao || "")) {
+    linhas.push("Definição alterada");
+  }
+
+  if ((term.original.conceito || "") !== (term.conceito || "")) {
+    linhas.push("Conceito alterado");
+  }
+
+  if ((term.original.notaEscopo || "") !== (term.notaEscopo || "")) {
+    linhas.push("Nota de escopo alterada");
+  }
+
+  if ((term.original.notaUso || "") !== (term.notaUso || "")) {
+    linhas.push("Nota de uso alterada");
+  }
+
+  if (!linhas.length) {
+    return "";
+  }
+
+  return `
+    <ul class="small-list">
+      ${linhas.map(linha => `<li>${escapeHtml(linha)}</li>`).join("")}
+    </ul>
+  `;
+}
 
     function displayTermName(term) {
       if (term.termoAnterior && term.termoAnterior !== term.termo) {
@@ -1975,12 +2138,23 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
       return escapeHtml(value);
     }
 
-    function render() {
+   function render() {
       state = normalizeState(state);
       renderTree();
       renderParentOptions();
-      renderTermArea();
+      updateReviewTopButton();
+
+      if (reviewMode) {
+        renderPendingArea();
+      } else {
+        renderTermArea();
+      }
     }
+
+    reviewTopBtn.addEventListener("click", () => {
+      reviewMode = true;
+      render();
+    });
 
     searchInput.addEventListener("input", renderTree);
     clearSearchBtn.addEventListener("click", () => {
