@@ -1031,8 +1031,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
             <div><strong>${escapeHtml(c.author)}</strong> <span class="muted">· ${escapeHtml(c.createdAt)}</span></div>
             <span class="status-pill ${statusClass}">${statusLabel}</span>
           </div>
-          <div>${escapeHtml(c.text || "").replace(/
-/g, "<br>")}</div>
+          <div>${escapeHtml(c.text || "").split("\\n").join("<br>")}</div>
           ${footer}
           <div class="toolbar">
             ${c.resolved
