@@ -922,6 +922,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         relacionadosNaoAutorizados: Array.isArray(term.relacionadosNaoAutorizados)
           ? [...term.relacionadosNaoAutorizados]
           : []
+      };
     }
 
     function registerReviewMetadata(term) {
