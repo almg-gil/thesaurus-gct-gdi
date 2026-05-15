@@ -17,6 +17,7 @@
       --blue-bg: #edf4ff;
       --green-bg: #edf8f0;
       --red-bg: #fff0f0;
+      --left-width: 540px;
     }
 
     * { box-sizing: border-box; }
@@ -80,7 +81,7 @@
     .app {
       height: calc(100vh - 42px);
       display: grid;
-      grid-template-columns: 360px 1fr;
+      grid-template-columns: var(--left-width) 7px 1fr;
     }
 
     .left {
@@ -88,6 +89,27 @@
       padding: 10px;
       overflow: auto;
       background: #fff;
+    }
+
+    .splitter {
+      cursor: col-resize;
+      background: #f4f4f4;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .splitter:hover,
+    .splitter.resizing {
+      background: var(--selected);
+    }
+
+    body.resizing {
+      cursor: col-resize;
+      user-select: none;
+    }
+
+    .tree-box {
+      overflow: auto;
     }
 
     .right {
@@ -395,6 +417,10 @@
         grid-template-columns: 1fr;
         height: auto;
       }
+
+      .splitter {
+        display: none;
+      }
       .left {
         border-right: 0;
         border-bottom: 1px solid var(--border);
@@ -454,6 +480,8 @@
         <p id="statusMessage" class="muted"></p>
       </div>
     </aside>
+
+    <div id="splitter" class="splitter" title="Arraste para redimensionar"></div>
 
     <section class="right">
       <div id="termArea"></div>
@@ -562,6 +590,8 @@
 
     const treeEl = document.getElementById("tree");
     const searchInput = document.getElementById("searchInput");
+    const splitter = document.getElementById("splitter");
+    const LAYOUT_KEY = "tesauro_left_width";
     const clearSearchBtn = document.getElementById("clearSearchBtn");
     const termArea = document.getElementById("termArea");
     const newTerm = document.getElementById("newTerm");
@@ -575,6 +605,46 @@
     const resetBtn = document.getElementById("resetBtn");
     const statusMessage = document.getElementById("statusMessage");
 
+    function setLeftWidth(px) {
+      const min = 280;
+      const max = Math.max(360, window.innerWidth - 360);
+      const width = Math.min(Math.max(px, min), max);
+
+      document.documentElement.style.setProperty("--left-width", `${width}px`);
+      localStorage.setItem(LAYOUT_KEY, String(width));
+    }
+
+    function initResizableLayout() {
+      const savedWidth = Number(localStorage.getItem(LAYOUT_KEY));
+
+      if (savedWidth) {
+        setLeftWidth(savedWidth);
+      }
+
+      let resizing = false;
+
+      splitter.addEventListener("pointerdown", event => {
+        resizing = true;
+        splitter.classList.add("resizing");
+        document.body.classList.add("resizing");
+        splitter.setPointerCapture(event.pointerId);
+      });
+
+      splitter.addEventListener("pointermove", event => {
+        if (!resizing) return;
+        setLeftWidth(event.clientX);
+      });
+
+      function stopResize() {
+        resizing = false;
+        splitter.classList.remove("resizing");
+        document.body.classList.remove("resizing");
+      }
+
+      splitter.addEventListener("pointerup", stopResize);
+      splitter.addEventListener("pointercancel", stopResize);
+    }
+    
     function setStatus(message) {
       statusMessage.textContent = message || "";
     }
@@ -1644,6 +1714,7 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
       render();
     }
 
+    initResizableLayout();
     iniciarApp();
   </script>
 </body>
