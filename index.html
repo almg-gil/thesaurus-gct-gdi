@@ -617,6 +617,13 @@
       padding-top: 10px;
     }
 
+    .export-box {
+      display: none;
+      margin-top: 16px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+
     #statusMessage {
       margin-top: 8px;
       line-height: 1.35;
@@ -945,6 +952,18 @@
     function matriculaParaEmail(matricula) {
       return `${String(matricula || "").trim().toLowerCase()}${AUTH_EMAIL_DOMAIN}`;
     }
+
+    function normalizeProfileName(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
+    }
+
+function userCanAccessManagement() {
+  return normalizeProfileName(currentProfile.value) === "bibliotecarios_gil_1";
+}
 
     function mostrarTelaLogin() {
       document.body.classList.remove("logged-in");
@@ -1417,6 +1436,14 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
     }
 
     function updateReviewTopButton() {
+      if (!userCanAccessManagement()) {
+        reviewTopBtn.style.display = "none";
+        reviewMode = false;
+        return;
+      }
+
+      reviewTopBtn.style.display = "";
+
       const count = managementCount();
       reviewTopBtn.textContent = `Gestão (${count})`;
       reviewTopBtn.classList.toggle("has-pending", count > 0);
@@ -1931,6 +1958,10 @@ function renderOriginalSummary(term) {
     }
 
     async function marcarFeitoNoSth(actionId) {
+      if (!userCanAccessManagement()) {
+        alert("Você não tem permissão para marcar ações como feitas no STH.");
+        return;
+      }
       const action = state.actionHistory.find(item => item.id === actionId);
       if (!action) return;
 
@@ -2170,7 +2201,7 @@ function renderOriginalSummary(term) {
           <button class="tab active" data-tab="cadastro">Cadastro</button>
           <button class="tab" data-tab="relacoes">Relacionamentos</button>
           <button class="tab" data-tab="comentarios">Comentários (${comments.filter(c => !c.resolved).length} abertos)</button>
-          <button class="tab" data-tab="pendencias">Pendências (${pendingCount})</button>
+          ${userCanAccessManagement() ? `<button class="tab" data-tab="pendencias">Pendências (${pendingCount})</button>` : ""}
         </div>
 
         <div id="cadastro" class="panel active">
@@ -2243,10 +2274,11 @@ function renderOriginalSummary(term) {
               </div>
             </div>
 
-            <div id="pendencias" class="panel">
-              <div id="termPendingList"></div>
-            </div>
-            `;
+            ${userCanAccessManagement() ? `
+              <div id="pendencias" class="panel">
+                <div id="termPendingList"></div>
+              </div>
+            ` : ""}
 
       const termPendingList = document.getElementById("termPendingList");
       if (termPendingList) {
@@ -2582,6 +2614,11 @@ function renderOriginalSummary(term) {
     }
 
     async function approvePending(termId) {
+
+      if (!userCanAccessManagement()) {
+        alert("Você não tem permissão para aprovar ações.");
+          return;
+      }
       const term = getTerm(termId);
       if (!term) return;
 
@@ -2610,6 +2647,10 @@ function renderOriginalSummary(term) {
     }
 
     async function rejectPending(termId) {
+      if (!userCanAccessManagement()) {
+        alert("Você não tem permissão para rejeitar ações.");
+        return;
+      }
       const term = getTerm(termId);
       if (!term) return;
 
@@ -3656,7 +3697,10 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
     }
 
     reviewTopBtn.addEventListener("click", () => {
+      if (!userCanAccessManagement()) return;
+
       reviewMode = true;
+      managementTab = "acoes";
       render();
     });
 
