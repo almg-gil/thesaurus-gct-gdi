@@ -115,6 +115,7 @@
       font-size: 13px;
     }
 
+
     .user-name-display {
       color: #111;
       font-weight: bold;
@@ -555,24 +556,42 @@
 </head>
 <body class="logged-out">
   <div id="loginScreen" class="login-screen">
-  <form id="loginForm" class="login-card">
-    <h1>Tesauro GCT-GDI</h1>
-    <p class="muted">Informe sua matrícula e senha para acessar o sistema.</p>
+    <form id="loginForm" class="login-card">
+      <div class="login-logo-wrap">
+        <img
+          src="assets/logo-almg.png"
+          alt="Assembleia Legislativa de Minas Gerais"
+          class="login-logo"
+        />
+      </div>
 
-    <div class="field">
-      <label for="loginUsuario">Matrícula</label>
-      <input id="loginUsuario" type="text" autocomplete="username" autofocus placeholder="Ex.: m30267" />
-    </div>
+      <div class="login-project-title">Thesaurus GCT–GDI</div>
+      <div class="login-project-subtitle">Sistema de gestão do tesauro</div>
 
-    <div class="field">
-      <label for="loginSenha">Senha</label>
-      <input id="loginSenha" type="password" autocomplete="current-password" />
-    </div>
+      <div class="field">
+        <label for="loginUsuario">Login</label>
+        <input
+          id="loginUsuario"
+          type="text"
+          autocomplete="username"
+          autofocus
+          placeholder="Ex.: m30267"
+        />
+      </div>
 
-    <button id="loginBtn" type="submit" class="primary">Entrar</button>
+      <div class="field">
+        <label for="loginSenha">Senha</label>
+        <input
+          id="loginSenha"
+          type="password"
+          autocomplete="current-password"
+        />
+      </div>
 
-    <p id="loginError" class="login-error"></p>
-  </form>
+      <button id="loginBtn" type="submit" class="primary login-submit">Entrar</button>
+
+      <p id="loginError" class="login-error"></p>
+    </form>
 </div>
  <header>
   <strong>Tesauro GCT-GDI</strong>
