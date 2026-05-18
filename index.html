@@ -653,7 +653,7 @@
   <strong>Tesauro GCT-GDI</strong>
 
   <div class="top-actions">
-    <button id="reviewTopBtn" class="review-top-btn">Ver pendências (0)</button>
+    <button id="reviewTopBtn" class="review-top-btn">Gestão (0)</button>
   </div>
 
   <div class="user-area">
@@ -822,11 +822,16 @@
       comments: []
     };
 
-   let state = structuredClone(exemplo);
+  let state = structuredClone(exemplo);
   let draggedTermId = null;
   let reviewMode = false;
   let appStarted = false;
   let currentProfileData = null;
+
+  let managementTab = "acoes";
+  let managementActionFilter = "pendentes";
+  let managementCommentFilter = "nao_vistos";
+  let managementSthFilter = "aguardando";
 
   const AUTH_EMAIL_DOMAIN = "@almg.local";
 
@@ -1086,10 +1091,41 @@ O app usará os dados de exemplo.`);
         return structuredClone(exemplo);
       }
 
-      parsed.comments = Array.isArray(parsed.comments) ? parsed.comments : [];
-      parsed.expanded = Array.isArray(parsed.expanded) ? parsed.expanded.map(String) : [];
-      parsed.icmgSourceVersion = parsed.icmgSourceVersion || "";
-      parsed.icmgSourceImportedAt = parsed.icmgSourceImportedAt || "";
+      parsed.comments = (Array.isArray(parsed.comments) ? parsed.comments : []).map(comment => ({
+        id: String(comment.id || uid("comment")),
+        termId: comment.termId ? String(comment.termId) : "",
+        author: comment.author || "Usuário",
+        text: comment.text || "",
+        createdAt: comment.createdAt || "",
+        resolved: comment.resolved === true,
+        resolvedBy: comment.resolvedBy || null,
+        resolvedAt: comment.resolvedAt || null,
+        visto: comment.visto === true,
+        vistoPor: comment.vistoPor || "",
+        vistoEm: comment.vistoEm || ""
+      }));
+
+      parsed.actionHistory = (Array.isArray(parsed.actionHistory) ? parsed.actionHistory : []).map(action => ({
+        id: String(action.id || uid("action")),
+        termId: action.termId ? String(action.termId) : "",
+        termo: action.termo || "",
+        caminho: action.caminho || "",
+        tipo: action.tipo || "",
+        tipoLabel: action.tipoLabel || "",
+        decisao: action.decisao || "",
+        decididoPor: action.decididoPor || "",
+        decididoEm: action.decididoEm || "",
+        resumo: Array.isArray(action.resumo) ? action.resumo.map(String) : [],
+        original: action.original && typeof action.original === "object" ? action.original : null,
+        final: action.final && typeof action.final === "object" ? action.final : null,
+        sthStatus: action.sthStatus || "nao_aplicavel",
+        sthFeitoPor: action.sthFeitoPor || "",
+        sthFeitoEm: action.sthFeitoEm || ""
+      }));
+
+    parsed.expanded = Array.isArray(parsed.expanded) ? parsed.expanded.map(String) : [];
+    parsed.icmgSourceVersion = parsed.icmgSourceVersion || "";
+    parsed.icmgSourceImportedAt = parsed.icmgSourceImportedAt || "";
 
       parsed.terms = parsed.terms.map(term => ({
         id: String(term.id || uid("term")),
@@ -1332,49 +1368,268 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       return state.terms.filter(t => t.revisao && t.revisao !== REVIEW_ORIGINAL);
     }
 
+    function unseenComments() {
+      return state.comments.filter(comment => comment.visto !== true);
+    }
+
+    function managementCount() {
+      return pendingTerms().length + unseenComments().length;
+    }
+
     function isTermPending(term) {
       return Boolean(term && term.revisao && term.revisao !== REVIEW_ORIGINAL);
     }
 
     function updateReviewTopButton() {
-      const count = pendingTerms().length;
-      reviewTopBtn.textContent = `Ver pendências (${count})`;
+      const count = managementCount();
+      reviewTopBtn.textContent = `Gestão (${count})`;
       reviewTopBtn.classList.toggle("has-pending", count > 0);
     }
 
     function renderPendingArea() {
-      const pendencias = pendingTerms()
-        .slice()
-        .sort((a, b) => reviewLabel(a.revisao).localeCompare(reviewLabel(b.revisao), "pt-BR") || a.termo.localeCompare(b.termo, "pt-BR"));
+      renderManagementArea();
+    }
 
+    function renderManagementArea() {
       termArea.innerHTML = `
         <div class="term-header">
-          <h1>Pendências de revisão</h1>
-          <div class="muted">${pendencias.length} pendência(s) aguardando deliberação da biblioteca.</div>
+          <h1>Gestão da revisão</h1>
+          <div class="muted">
+            ${pendingTerms().length} ação(ões) pendente(s) e ${unseenComments().length} comentário(s) não visto(s).
+          </div>
         </div>
 
-        <div class="toolbar">
-          <button id="backToTermBtn">Voltar ao termo selecionado</button>
+        <div class="tabs">
+          <button class="tab ${managementTab === "acoes" ? "active" : ""}" data-management-tab="acoes">Ações</button>
+          <button class="tab ${managementTab === "comentarios" ? "active" : ""}" data-management-tab="comentarios">Comentários</button>
         </div>
 
-        <hr>
+        <div id="gestaoAcoes" class="panel ${managementTab === "acoes" ? "active" : ""}">
+          <div class="toolbar">
+            <label>
+              Situação:
+              <select id="managementActionFilter">
+                <option value="pendentes" ${managementActionFilter === "pendentes" ? "selected" : ""}>Pendentes</option>
+                <option value="aprovadas" ${managementActionFilter === "aprovadas" ? "selected" : ""}>Aprovadas</option>
+                <option value="rejeitadas" ${managementActionFilter === "rejeitadas" ? "selected" : ""}>Rejeitadas</option>
+              </select>
+            </label>
 
-        ${
-          pendencias.length
-            ? pendencias.map(renderPendingItemHtml).join("")
-            : '<div class="empty">Não há pendências de revisão.</div>'
-        }
+            ${
+              managementActionFilter === "aprovadas"
+                ? `
+                  <label>
+                    STH:
+                    <select id="managementSthFilter">
+                      <option value="aguardando" ${managementSthFilter === "aguardando" ? "selected" : ""}>Aguardando STH</option>
+                      <option value="feito" ${managementSthFilter === "feito" ? "selected" : ""}>Feitas no STH</option>
+                      <option value="todas" ${managementSthFilter === "todas" ? "selected" : ""}>Todas</option>
+                    </select>
+                  </label>
+                `
+                : ""
+            }
+          </div>
+
+          <hr>
+
+          ${renderManagementActionsHtml()}
+        </div>
+
+        <div id="gestaoComentarios" class="panel ${managementTab === "comentarios" ? "active" : ""}">
+          <div class="toolbar">
+            <label>
+              Situação:
+              <select id="managementCommentFilter">
+                <option value="nao_vistos" ${managementCommentFilter === "nao_vistos" ? "selected" : ""}>Não vistos</option>
+                <option value="vistos" ${managementCommentFilter === "vistos" ? "selected" : ""}>Vistos</option>
+                <option value="todos" ${managementCommentFilter === "todos" ? "selected" : ""}>Todos</option>
+              </select>
+            </label>
+          </div>
+
+          <hr>
+
+          ${renderManagementCommentsHtml()}
+        </div>
       `;
 
-      const backToTermBtn = document.getElementById("backToTermBtn");
-      if (backToTermBtn) {
-        backToTermBtn.onclick = () => {
-          reviewMode = false;
-          render();
-            };
-  }
+      wireManagementArea();
+    }
 
-      document.querySelectorAll("[data-pending-action]").forEach(btn => {
+    function renderManagementActionsHtml() {
+      if (managementActionFilter === "pendentes") {
+        const pendentes = getPendingTerms();
+
+        if (!pendentes.length) {
+          return '<div class="empty">Não há ações pendentes.</div>';
+        }
+
+        return `
+          <div class="pending-list">
+            ${pendentes.map(renderPendingItemHtml).join("")}
+          </div>
+        `;
+      }
+
+      let actions = state.actionHistory.filter(action => {
+        if (managementActionFilter === "aprovadas") return action.decisao === "aprovada";
+        if (managementActionFilter === "rejeitadas") return action.decisao === "rejeitada";
+        return false;
+      });
+
+       if (managementActionFilter === "aprovadas" && managementSthFilter !== "todas") {
+        actions = actions.filter(action => action.sthStatus === managementSthFilter);
+      }
+
+      actions = actions.slice().sort((a, b) => String(b.decididoEm).localeCompare(String(a.decididoEm)));
+
+      if (!actions.length) {
+        return '<div class="empty">Nenhuma ação encontrada para este filtro.</div>';
+  }
+    
+      return `
+        <div class="pending-list">
+          ${actions.map(renderActionHistoryItemHtml).join("")}
+        </div>
+      `;
+    }
+
+    function renderActionHistoryItemHtml(action) {
+      const termExists = action.termId && getTerm(action.termId);
+      const aprovado = action.decisao === "aprovada";
+      const aguardandoSth = aprovado && action.sthStatus !== "feito";
+
+      return `
+        <div class="pending-card review-${escapeAttr(action.tipo || REVIEW_ORIGINAL)}">
+          <div class="pending-title">
+            <span class="review-badge ${escapeAttr(action.tipo || "")}">${escapeHtml(action.tipoLabel || action.tipo || "ação")}</span>
+            <strong>${escapeHtml(action.termo || "Termo não identificado")}</strong>
+          </div>
+
+          <div class="muted">${escapeHtml(action.caminho || "")}</div>
+          <div class="muted">
+            Decisão: <strong>${action.decisao === "aprovada" ? "aprovada" : "rejeitada"}</strong>
+            por ${escapeHtml(action.decididoPor || "Usuário")}
+            ${action.decididoEm ? `em ${escapeHtml(action.decididoEm)}` : ""}
+          </div>
+
+          ${
+            aprovado
+              ? `<div class="muted">STH: <strong>${action.sthStatus === "feito" ? "feito" : "aguardando execução"}</strong></div>`
+              : ""
+          }
+
+          ${
+            action.sthStatus === "feito"
+              ? `<div class="muted">Feito no STH por ${escapeHtml(action.sthFeitoPor || "Usuário")} ${action.sthFeitoEm ? `em ${escapeHtml(action.sthFeitoEm)}` : ""}</div>`
+              : ""
+          }
+
+          ${
+            Array.isArray(action.resumo) && action.resumo.length
+              ? `<ul class="pending-summary">${action.resumo.map(line => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`
+              : ""
+          }
+
+          <div class="toolbar">
+            ${termExists ? `<button data-history-action="view" data-term-id="${escapeAttr(action.termId)}">Ver termo</button>` : ""}
+            ${aguardandoSth ? `<button class="success" data-history-action="mark-sth" data-action-id="${escapeAttr(action.id)}">Marcar como feito no STH</button>` : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderManagementCommentsHtml() {
+      let comments = state.comments.slice();
+
+      if (managementCommentFilter === "nao_vistos") {
+        comments = comments.filter(comment => comment.visto !== true);
+      } else if (managementCommentFilter === "vistos") {
+        comments = comments.filter(comment => comment.visto === true);
+      }
+
+      comments = comments.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+
+      if (!comments.length) {
+        return '<div class="empty">Nenhum comentário encontrado para este filtro.</div>';
+      }
+
+      return `
+        <div class="pending-list">
+          ${comments.map(renderManagementCommentHtml).join("")}
+        </div>
+      `;
+    }
+
+    function renderManagementCommentHtml(comment) {
+      const term = getTerm(comment.termId);
+      const visto = comment.visto === true;
+
+      return `
+        <div class="comment-box ${comment.resolved ? "resolved" : ""}">
+          <div class="comment-head">
+            <div>
+              <strong>${escapeHtml(term ? displayTermName(term) : "Termo não encontrado")}</strong>
+              <div class="muted">${term ? escapeHtml(termPath(term)) : ""}</div>
+            </div>
+            <span class="status-pill ${visto ? "resolved" : "open"}">${visto ? "visto" : "não visto"}</span>
+          </div>
+
+          <div class="muted">
+            Comentário de ${escapeHtml(comment.author || "Usuário")}
+            ${comment.createdAt ? `em ${escapeHtml(comment.createdAt)}` : ""}
+          </div>
+
+          <div style="margin-top: 6px;">${escapeHtml(comment.text || "").split("\\n").join("<br>")}</div>
+
+          ${
+            visto
+              ? `<div class="muted" style="margin-top: 6px;">Visto por ${escapeHtml(comment.vistoPor || "Usuário")} ${comment.vistoEm ? `em ${escapeHtml(comment.vistoEm)}` : ""}</div>`
+              : ""
+          }
+
+          <div class="toolbar">
+            ${term ? `<button data-comment-management-action="view-term" data-term-id="${escapeAttr(comment.termId)}">Ver termo</button>` : ""}
+            ${!visto ? `<button class="success" data-comment-management-action="mark-seen" data-comment-id="${escapeAttr(comment.id)}">Marcar como visto</button>` : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    function wireManagementArea() {
+      termArea.querySelectorAll("[data-management-tab]").forEach(tab => {
+        tab.onclick = () => {
+          managementTab = tab.dataset.managementTab;
+          render();
+        };
+      });
+
+      const actionFilter = document.getElementById("managementActionFilter");
+      if (actionFilter) {
+        actionFilter.onchange = () => {
+          managementActionFilter = actionFilter.value;
+          render();
+        };
+      }
+
+      const sthFilter = document.getElementById("managementSthFilter");
+      if (sthFilter) {
+        sthFilter.onchange = () => {
+          managementSthFilter = sthFilter.value;
+          render();
+        };
+      }
+
+      const commentFilter = document.getElementById("managementCommentFilter");
+      if (commentFilter) {
+        commentFilter.onchange = () => {
+          managementCommentFilter = commentFilter.value;
+          render();
+        };
+      }
+
+      termArea.querySelectorAll("[data-pending-action]").forEach(btn => {
         btn.onclick = async () => {
           const termId = btn.dataset.termId;
           const action = btn.dataset.pendingAction;
@@ -1393,10 +1648,56 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           if (action === "reject") {
             await rejectPending(termId);
-            return;
           }
         };
       });
+
+      termArea.querySelectorAll("[data-history-action]").forEach(btn => {
+        btn.onclick = async () => {
+          const action = btn.dataset.historyAction;
+
+          if (action === "view") {
+            state.selectedId = btn.dataset.termId;
+            reviewMode = false;
+            render();
+            return;
+          }
+
+          if (action === "mark-sth") {
+            await marcarFeitoNoSth(btn.dataset.actionId);
+          }
+        };
+      });
+
+      termArea.querySelectorAll("[data-comment-management-action]").forEach(btn => {
+        btn.onclick = async () => {
+          const action = btn.dataset.commentManagementAction;
+
+          if (action === "view-term") {
+            state.selectedId = btn.dataset.termId;
+            reviewMode = false;
+            render();
+            setActiveTab("comentarios");
+            return;
+          }
+
+          if (action === "mark-seen") {
+            await marcarComentarioComoVisto(btn.dataset.commentId);
+          }
+        };
+      });
+    }
+
+    async function marcarComentarioComoVisto(commentId) {
+      const comment = state.comments.find(item => item.id === commentId);
+      if (!comment) return;
+
+      comment.visto = true;
+      comment.vistoPor = currentUser.value.trim() || "Usuário";
+      comment.vistoEm = nowLabel();
+
+      await saveState();
+      render();
     }
 
 function renderPendingItemHtml(term) {
@@ -1465,6 +1766,96 @@ function renderOriginalSummary(term) {
     </ul>
   `;
 }
+
+    function pendingSummaryLines(term) {
+      if (term.revisao === REVIEW_NOVO) {
+        return [`Novo termo em: ${getTermNameForSummary(term.parentId)}`];
+      }
+
+      if (term.revisao === REVIEW_EXCLUIR) {
+        return ["Exclusão sugerida para este termo."];
+      }
+
+      const original = term.original;
+
+      if (!original) {
+        return ["Alteração registrada sem cópia anterior disponível."];
+      }
+
+      const changes = [];
+
+      if ((original.termo || "") !== (term.termo || "")) {
+        changes.push(`Nome: ${original.termo || ""} → ${term.termo || ""}`);
+      }
+  
+      if ((original.parentId || null) !== (term.parentId || null)) {
+        changes.push(`Termo geral: ${getTermNameForSummary(original.parentId)} → ${getTermNameForSummary(term.parentId)}`);
+      }
+
+      if ((original.definicao || "") !== (term.definicao || "")) {
+        changes.push("Definição alterada");
+      }
+
+      if ((original.notaEscopo || "") !== (term.notaEscopo || "")) {
+        changes.push("Nota Explicativa alterada");
+      }
+
+      if ((original.notaUso || "") !== (term.notaUso || "")) {
+        changes.push("Nota Histórica alterada");
+      }
+
+      if (JSON.stringify(original.relacionados || []) !== JSON.stringify(term.relacionados || [])) {
+        changes.push("Sinônimos autorizados / TR alterados");
+      }
+
+      if (
+        JSON.stringify(original.relacionadosNaoAutorizados || []) !==
+        JSON.stringify(term.relacionadosNaoAutorizados || [])
+      ) {
+    changes.push("Sinônimos não autorizados / UP alterados");
+      }
+
+      return changes.length ? changes : ["Alteração registrada."];
+    }
+
+    function createActionHistoryItem(term, decisao) {
+      const resumo = pendingSummaryLines(term);
+
+      return {
+        id: uid("action"),
+        termId: term.id,
+        termo: displayTermName(term),
+        caminho: termPath(term),
+        tipo: term.revisao,
+        tipoLabel: reviewLabel(term.revisao),
+        decisao,
+        decididoPor: currentUser.value.trim() || "Usuário",
+        decididoEm: nowLabel(),
+        resumo,
+        original: term.original ? structuredClone(term.original) : null,
+        final: snapshotTerm(term),
+        sthStatus: decisao === "aprovada" ? "aguardando" : "nao_aplicavel",
+        sthFeitoPor: "",
+        sthFeitoEm: ""
+      };
+    }
+
+    function registrarDecisao(term, decisao) {
+      state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory : [];
+      state.actionHistory.push(createActionHistoryItem(term, decisao));
+    }
+
+    async function marcarFeitoNoSth(actionId) {
+      const action = state.actionHistory.find(item => item.id === actionId);
+      if (!action) return;
+
+      action.sthStatus = "feito";
+      action.sthFeitoPor = currentUser.value.trim() || "Usuário";
+      action.sthFeitoEm = nowLabel();
+
+      await saveState();
+      render();
+    }
 
     function displayTermName(term) {
       if (term.termoAnterior && term.termoAnterior !== term.termo) {
@@ -1785,58 +2176,13 @@ function renderOriginalSummary(term) {
     }
 
     function renderPendingSummary(term) {
-      if (term.revisao === REVIEW_NOVO) {
-        return `<ul class="pending-summary"><li>Novo termo em: ${escapeHtml(getTermNameForSummary(term.parentId))}</li></ul>`;
-      }
+      const lines = pendingSummaryLines(term);
 
-      if (term.revisao === REVIEW_EXCLUIR) {
-        return `<ul class="pending-summary"><li>Exclusão sugerida para este termo.</li></ul>`;
-      }
-
-      const original = term.original;
-      if (!original) {
-        return `<ul class="pending-summary"><li>Alteração registrada sem cópia anterior disponível.</li></ul>`;
-      }
-
-      const changes = [];
-
-      if ((original.termo || "") !== (term.termo || "")) {
-        changes.push(`Nome: ${escapeHtml(original.termo || "")} → ${escapeHtml(term.termo || "")}`);
-      }
-
-      if ((original.parentId || null) !== (term.parentId || null)) {
-        changes.push(`Termo geral: ${escapeHtml(getTermNameForSummary(original.parentId))} → ${escapeHtml(getTermNameForSummary(term.parentId))}`);
-      }
-
-
-      if ((original.definicao || "") !== (term.definicao || "")) {
-        changes.push("Definição alterada");
-      }
-
-      if ((original.notaEscopo || "") !== (term.notaEscopo || "")) {
-        changes.push("Nota Explicativa alterada");
-      }
-
-      if ((original.notaUso || "") !== (term.notaUso || "")) {
-        changes.push("Nota Histórica alterada");
-      }
-
-      if (JSON.stringify(original.relacionados || []) !== JSON.stringify(term.relacionados || [])) {
-        changes.push("Termos relacionados alterados");
-      }
-
-      if (
-        JSON.stringify(original.relacionadosNaoAutorizados || []) !==
-        JSON.stringify(term.relacionadosNaoAutorizados || [])
-      ) {
-        changes.push("Sinônimos não autorizados alterados");
-      }
-
-      if (!changes.length) {
-        changes.push("Alteração registrada.");
-      }
-
-      return `<ul class="pending-summary">${changes.map(change => `<li>${change}</li>`).join("")}</ul>`;
+      return `
+        <ul class="pending-summary">
+          ${lines.map(line => `<li>${escapeHtml(line)}</li>`).join("")}
+        </ul>
+      `;
     }
 
     function renderPendingPanel(termFilter = null) {
@@ -2052,7 +2398,10 @@ function renderOriginalSummary(term) {
             createdAt: nowLabel(),
             resolved: false,
             resolvedBy: null,
-            resolvedAt: null
+            resolvedAt: null,
+            visto: false,
+            vistoPor: "",
+            vistoEm: ""
           });
 
           await saveState();
@@ -2070,6 +2419,10 @@ function renderOriginalSummary(term) {
             comment.resolved = true;
             comment.resolvedBy = currentUser.value.trim() || "Usuário";
             comment.resolvedAt = nowLabel();
+
+            comment.visto = true;
+            comment.vistoPor = currentUser.value.trim() || "Usuário";
+            comment.vistoEm = nowLabel();
           } else {
             comment.resolved = false;
             comment.resolvedBy = null;
@@ -2130,15 +2483,21 @@ function renderOriginalSummary(term) {
         }
 
         if (!confirm(`Aprovar a exclusão definitiva do termo "${displayTermName(term)}"?`)) return;
+
+        registrarDecisao(term, "aprovada");
         removeTermCompletely(term.id);
       } else {
+        registrarDecisao(term, "aprovada");
         clearReview(term);
         term.termoAnterior = "";
       }
 
       await saveState();
       render();
-      setActiveTab("pendencias");
+
+      if (!reviewMode) {
+        setActiveTab("pendencias");
+      }
     }
 
     async function rejectPending(termId) {
@@ -2146,26 +2505,35 @@ function renderOriginalSummary(term) {
       if (!term) return;
 
       if (term.revisao === REVIEW_NOVO) {
-        if (childrenOf(term.id).length) {
-          alert("Não é possível rejeitar termo novo com termos específicos. Delibere ou mova os filhos primeiro.");
-          return;
-        }
-
-        if (!confirm(`Rejeitar e remover o termo novo "${displayTermName(term)}"?`)) return;
-        removeTermCompletely(term.id);
-      } else if (term.revisao === REVIEW_MODIFICADO) {
-        if (term.original) {
-          restoreTermFromOriginal(term);
-        }
-        clearReview(term);
-      } else if (term.revisao === REVIEW_EXCLUIR) {
-        clearReview(term);
+      if (childrenOf(term.id).length) {
+        alert("Não é possível rejeitar termo novo com termos específicos. Delibere ou mova os filhos primeiro.");
+        return;
       }
 
-      await saveState();
-      render();
+      if (!confirm(`Rejeitar e remover o termo novo "${displayTermName(term)}"?`)) return;
+
+      registrarDecisao(term, "rejeitada");
+      removeTermCompletely(term.id);
+    } else if (term.revisao === REVIEW_MODIFICADO) {
+      registrarDecisao(term, "rejeitada");
+
+      if (term.original) {
+        restoreTermFromOriginal(term);
+      }
+
+      clearReview(term);
+    } else if (term.revisao === REVIEW_EXCLUIR) {
+      registrarDecisao(term, "rejeitada");
+      clearReview(term);
+    }
+
+    await saveState();
+    render();
+
+    if (!reviewMode) {
       setActiveTab("pendencias");
     }
+  }
 
     function setActiveTab(tabId) {
       document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tabId));
