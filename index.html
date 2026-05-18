@@ -1837,10 +1837,41 @@ function renderPendingItemHtml(term) {
   `;
 }
 
+
+function normalizeDiffValue(value) {
+  return String(value || "").trim();
+}
+
+function makeFieldDiff(label, oldValue, newValue) {
+  const before = normalizeDiffValue(oldValue);
+  const after = normalizeDiffValue(newValue);
+
+  if (before === after) return null;
+
+  return `${label} alterada:\nAntes: ${before || "—"}\nDepois: ${after || "—"}`;
+}
+
+function makeSimpleDiff(label, oldValue, newValue) {
+  const before = normalizeDiffValue(oldValue);
+  const after = normalizeDiffValue(newValue);
+
+  if (before === after) return null;
+
+  return `${label}: ${before || "—"} → ${after || "—"}`;
+}
 function renderOriginalSummary(term) {
-  if (!term.original) {
+  const lines = pendingSummaryLines(term);
+
+  if (!lines.length) {
     return "";
   }
+
+  return `
+    <ul class="small-list">
+      ${lines.map(line => `<li>${escapeHtml(line).split("\\n").join("<br>")}</li>`).join("")}
+    </ul>
+  `;
+}
 
   const originalParent = getTerm(term.original.parentId);
   const currentParent = getTerm(term.parentId);
@@ -1881,11 +1912,21 @@ function renderOriginalSummary(term) {
 
     function pendingSummaryLines(term) {
       if (term.revisao === REVIEW_NOVO) {
-        return [`Novo termo em: ${getTermNameForSummary(term.parentId)}`];
+        return [
+          `Novo termo em: ${getTermNameForSummary(term.parentId)}`,
+          `Termo criado: ${term.termo || "—"}`,
+          term.definicao ? `Definição: ${term.definicao}` : "",
+          term.notaEscopo ? `Nota Explicativa: ${term.notaEscopo}` : "",
+          term.notaUso ? `Nota Histórica: ${term.notaUso}` : ""
+        ].filter(Boolean);
       }
 
       if (term.revisao === REVIEW_EXCLUIR) {
-        return ["Exclusão sugerida para este termo."];
+        return [
+          "Exclusão sugerida para este termo.",
+          `Termo: ${term.termo || "—"}`,
+          `Caminho: ${termPath(term) || "—"}`
+        ];
       }
 
       const original = term.original;
@@ -1896,61 +1937,64 @@ function renderOriginalSummary(term) {
 
       const changes = [];
 
-      if ((original.termo || "") !== (term.termo || "")) {
-        changes.push(`Nome: ${original.termo || ""} → ${term.termo || ""}`);
-      }
-  
+      const nomeDiff = makeSimpleDiff("Nome", original.termo, term.termo);
+      if (nomeDiff) changes.push(nomeDiff);
+
       if ((original.parentId || null) !== (term.parentId || null)) {
-        changes.push(`Termo geral: ${getTermNameForSummary(original.parentId)} → ${getTermNameForSummary(term.parentId)}`);
+        changes.push(
+          `Termo geral alterado:\nAntes: ${getTermNameForSummary(original.parentId)}\nDepois: ${getTermNameForSummary(term.parentId)}`
+        );
       }
 
-      if ((original.definicao || "") !== (term.definicao || "")) {
-        changes.push("Definição alterada");
-      }
+      const definicaoDiff = makeFieldDiff("Definição", original.definicao, term.definicao);
+      if (definicaoDiff) changes.push(definicaoDiff);
 
-      if ((original.notaEscopo || "") !== (term.notaEscopo || "")) {
-        changes.push("Nota Explicativa alterada");
-      }
+      const notaExplicativaDiff = makeFieldDiff("Nota Explicativa", original.notaEscopo, term.notaEscopo);
+      if (notaExplicativaDiff) changes.push(notaExplicativaDiff);
 
-      if ((original.notaUso || "") !== (term.notaUso || "")) {
-        changes.push("Nota Histórica alterada");
-      }
+      const notaHistoricaDiff = makeFieldDiff("Nota Histórica", original.notaUso, term.notaUso);
+      if (notaHistoricaDiff) changes.push(notaHistoricaDiff);
 
       if (JSON.stringify(original.relacionados || []) !== JSON.stringify(term.relacionados || [])) {
-        changes.push("Sinônimos autorizados / TR alterados");
+        const antes = (original.relacionados || []).map(getTermNameForSummary).join("; ") || "—";
+        const depois = (term.relacionados || []).map(getTermNameForSummary).join("; ") || "—";
+
+        changes.push(`Sinônimos autorizados / TR alterados:\nAntes: ${antes}\nDepois: ${depois}`);
       }
 
       if (
         JSON.stringify(original.relacionadosNaoAutorizados || []) !==
         JSON.stringify(term.relacionadosNaoAutorizados || [])
       ) {
-    changes.push("Sinônimos não autorizados / UP alterados");
+        const antes = (original.relacionadosNaoAutorizados || []).join("; ") || "—";
+        const depois = (term.relacionadosNaoAutorizados || []).join("; ") || "—";
+
+        changes.push(`Sinônimos não autorizados / UP alterados:\nAntes: ${antes}\nDepois: ${depois}`);
       }
 
       return changes.length ? changes : ["Alteração registrada."];
     }
+        function createActionHistoryItem(term, decisao) {
+          const resumo = pendingSummaryLines(term);
 
-    function createActionHistoryItem(term, decisao) {
-      const resumo = pendingSummaryLines(term);
-
-      return {
-        id: uid("action"),
-        termId: term.id,
-        termo: displayTermName(term),
-        caminho: termPath(term),
-        tipo: term.revisao,
-        tipoLabel: reviewLabel(term.revisao),
-        decisao,
-        decididoPor: currentUser.value.trim() || "Usuário",
-        decididoEm: nowLabel(),
-        resumo,
-        original: term.original ? structuredClone(term.original) : null,
-        final: snapshotTerm(term),
-        sthStatus: decisao === "aprovada" ? "aguardando" : "nao_aplicavel",
-        sthFeitoPor: "",
-        sthFeitoEm: ""
-      };
-    }
+          return {
+            id: uid("action"),
+            termId: term.id,
+            termo: displayTermName(term),
+            caminho: termPath(term),
+            tipo: term.revisao,
+            tipoLabel: reviewLabel(term.revisao),
+            decisao,
+            decididoPor: currentUser.value.trim() || "Usuário",
+            decididoEm: nowLabel(),
+            resumo,
+            original: term.original ? structuredClone(term.original) : null,
+            final: snapshotTerm(term),
+            sthStatus: decisao === "aprovada" ? "aguardando" : "nao_aplicavel",
+            sthFeitoPor: "",
+            sthFeitoEm: ""
+          };
+        }
 
     function registrarDecisao(term, decisao) {
       state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory : [];
@@ -2302,10 +2346,9 @@ function renderOriginalSummary(term) {
 
       return `
         <ul class="pending-summary">
-          ${lines.map(line => `<li>${escapeHtml(line)}</li>`).join("")}
+          ${lines.map(line => `<li>${escapeHtml(line).split("\\n").join("<br>")}</li>`).join("")}
         </ul>
       `;
-    }
 
     function renderPendingPanel(termFilter = null) {
       const pending = termFilter
