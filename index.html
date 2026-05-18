@@ -2236,6 +2236,15 @@ function renderOriginalSummary(term) {
         .toLowerCase();
     }
 
+    const ICMG_CLASSES_IGNORADAS = new Set([
+      "sem classe",
+      "estrutura administrativa"
+    ]);
+
+    function isClasseIcmgIgnorada(classe) {
+      return ICMG_CLASSES_IGNORADAS.has(normalizeIcmgName(classe));
+    }
+
     function slugIcmg(value) {
       return String(value || "")
         .normalize("NFD")
@@ -2388,7 +2397,12 @@ function renderOriginalSummary(term) {
       const records = parseIcmgTxt(text);
 
       const authorizedRecords = records.filter(record => {
-        return record.kind === "TERMO" && firstField(record, "TERMO");
+        if (record.kind !== "TERMO") return false;
+        if (!firstField(record, "TERMO")) return false;
+
+        const classe = firstField(record, "CLASSE") || "Sem classe";
+
+        return !isClasseIcmgIgnorada(classe);
       });
 
       const terms = authorizedRecords.map(termoFromIcmgRecord);
