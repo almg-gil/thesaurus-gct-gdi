@@ -2280,6 +2280,9 @@ function renderOriginalSummary(term) {
               </div>
             ` : ""}
 
+      
+      `;
+      
       const termPendingList = document.getElementById("termPendingList");
       if (termPendingList) {
         termPendingList.innerHTML = renderPendingPanel(getTerm(state.selectedId));
