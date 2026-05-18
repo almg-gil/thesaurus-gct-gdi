@@ -1205,13 +1205,14 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         .map(term => term.id);
     }
 
-    function expandOnlyClasses() {
-      state.expanded = rootTermIds();
+    function collapseOnlyClasses() {
+      state.expanded = [];
     }
 
-    function collapseTreeToClasses() {
+    async function collapseTreeToClasses() {
       searchInput.value = "";
-      expandOnlyClasses();
+      collapseOnlyClasses();
+      await saveState();
       render();
     }
 
@@ -3007,7 +3008,7 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
 
       const atualizadoPeloTxt = await importarIcmgGithubSeNecessario();
 
-      expandOnlyClasses();
+      collapseOnlyClasses();
       render();
 
       if (!atualizadoPeloTxt) {
