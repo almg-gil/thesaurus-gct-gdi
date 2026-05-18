@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tesauro GCT-GDI</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <style>
     :root {
       --border: #d8d8d8;
@@ -510,6 +511,33 @@
     .comment-box.resolved {
       background: var(--soft);
       color: #555;
+    }
+
+    .reply-list {
+      margin-top: 10px;
+      border-top: 1px solid var(--border);
+      padding-top: 8px;
+    }
+
+    .reply-item {
+      margin-top: 6px;
+      padding: 7px;
+      border-left: 3px solid var(--blue);
+      background: #fafafa;
+    }
+
+    .reply-box {
+      margin-top: 10px;
+    }
+
+    .reply-box textarea {
+      width: 100%;
+      min-height: 60px;
+      resize: vertical;
+    }
+
+    .management-header-actions {
+      margin-top: 10px;
     }
 
     .comment-head {
@@ -1102,8 +1130,16 @@ O app usará os dados de exemplo.`);
         resolvedAt: comment.resolvedAt || null,
         visto: comment.visto === true,
         vistoPor: comment.vistoPor || "",
-        vistoEm: comment.vistoEm || ""
-      }));
+        vistoEm: comment.vistoEm || "",
+        replies: Array.isArray(comment.replies)
+          ? comment.replies.map(reply => ({
+            id: String(reply.id || uid("reply")),
+            author: reply.author || "Usuário",
+            text: reply.text || "",
+            createdAt: reply.createdAt || ""
+          }))
+        : []
+    }));
 
       parsed.actionHistory = (Array.isArray(parsed.actionHistory) ? parsed.actionHistory : []).map(action => ({
         id: String(action.id || uid("action")),
@@ -1399,6 +1435,10 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           </div>
         </div>
 
+        <div class="toolbar management-header-actions">
+          <button id="downloadHistoryPdfBtn">Baixar histórico (PDF)</button>
+        </div>
+
         <div class="tabs">
           <button class="tab ${managementTab === "acoes" ? "active" : ""}" data-management-tab="acoes">Ações</button>
           <button class="tab ${managementTab === "comentarios" ? "active" : ""}" data-management-tab="comentarios">Comentários</button>
@@ -1583,14 +1623,22 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           <div style="margin-top: 6px;">${escapeHtml(comment.text || "").split("\\n").join("<br>")}</div>
 
+          ${renderCommentRepliesHtml(comment)}
+
           ${
             visto
               ? `<div class="muted" style="margin-top: 6px;">Visto por ${escapeHtml(comment.vistoPor || "Usuário")} ${comment.vistoEm ? `em ${escapeHtml(comment.vistoEm)}` : ""}</div>`
               : ""
           }
 
+          <div class="reply-box">
+            <label class="muted" for="replyText-${escapeAttr(comment.id)}">Responder</label>
+            <textarea id="replyText-${escapeAttr(comment.id)}" placeholder="Escreva uma resposta para este comentário..."></textarea>
+          </div>
+
           <div class="toolbar">
             ${term ? `<button data-comment-management-action="view-term" data-term-id="${escapeAttr(comment.termId)}">Ver termo</button>` : ""}
+            <button class="primary" data-comment-management-action="reply" data-comment-id="${escapeAttr(comment.id)}">Enviar resposta</button>
             ${!visto ? `<button class="success" data-comment-management-action="mark-seen" data-comment-id="${escapeAttr(comment.id)}">Marcar como visto</button>` : ""}
           </div>
         </div>
@@ -1604,6 +1652,11 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           render();
         };
       });
+
+      const downloadHistoryPdfBtn = document.getElementById("downloadHistoryPdfBtn");
+      if (downloadHistoryPdfBtn) {
+        downloadHistoryPdfBtn.onclick = downloadHistoryPdf;
+      }
 
       const actionFilter = document.getElementById("managementActionFilter");
       if (actionFilter) {
@@ -1684,6 +1737,9 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           if (action === "mark-seen") {
             await marcarComentarioComoVisto(btn.dataset.commentId);
           }
+          if (action === "reply") {
+            await responderComentario(btn.dataset.commentId);
+}
         };
       });
     }
@@ -1691,6 +1747,35 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
     async function marcarComentarioComoVisto(commentId) {
       const comment = state.comments.find(item => item.id === commentId);
       if (!comment) return;
+
+      comment.visto = true;
+      comment.vistoPor = currentUser.value.trim() || "Usuário";
+      comment.vistoEm = nowLabel();
+
+      await saveState();
+      render();
+    }
+
+    async function responderComentario(commentId) {
+      const comment = state.comments.find(item => item.id === commentId);
+      if (!comment) return;
+
+      const textarea = document.getElementById(`replyText-${commentId}`);
+      const text = textarea ? textarea.value.trim() : "";
+
+      if (!text) {
+        alert("Escreva uma resposta antes de enviar.");
+        return;
+      }
+
+      comment.replies = Array.isArray(comment.replies) ? comment.replies : [];
+
+      comment.replies.push({
+        id: uid("reply"),
+        author: currentUser.value.trim() || "Usuário",
+        text,
+        createdAt: nowLabel()
+      });
 
       comment.visto = true;
       comment.vistoPor = currentUser.value.trim() || "Usuário";
@@ -2079,6 +2164,8 @@ function renderOriginalSummary(term) {
           <div class="muted">Situação: <strong>${escapeHtml(reviewLabel(term.revisao))}</strong></div>
         </div>
 
+        
+
         <div class="tabs">
           <button class="tab active" data-tab="cadastro">Cadastro</button>
           <button class="tab" data-tab="relacoes">Relacionamentos</button>
@@ -2269,12 +2356,33 @@ function renderOriginalSummary(term) {
             <span class="status-pill ${statusClass}">${statusLabel}</span>
           </div>
           <div>${escapeHtml(c.text || "").split("\\n").join("<br>")}</div>
+          ${renderCommentRepliesHtml(c)}
           ${footer}
           <div class="toolbar">
             ${c.resolved
               ? `<button data-comment-action="reopen" data-comment-id="${c.id}">Reabrir</button>`
               : `<button class="success" data-comment-action="resolve" data-comment-id="${c.id}">Resolver</button>`}
           </div>
+        </div>
+      `;
+    }
+
+    function renderCommentRepliesHtml(comment) {
+      const replies = Array.isArray(comment.replies) ? comment.replies : [];
+
+      if (!replies.length) {
+        return "";
+      }
+
+      return `
+        <div class="reply-list">
+          <strong>Respostas</strong>
+          ${replies.map(reply => `
+            <div class="reply-item">
+              <div><strong>${escapeHtml(reply.author || "Usuário")}</strong> <span class="muted">· ${escapeHtml(reply.createdAt || "")}</span></div>
+              <div>${escapeHtml(reply.text || "").split("\\n").join("<br>")}</div>
+            </div>
+          `).join("")}
         </div>
       `;
     }
@@ -2401,8 +2509,9 @@ function renderOriginalSummary(term) {
             resolvedAt: null,
             visto: false,
             vistoPor: "",
-            vistoEm: ""
-          });
+            vistoEm: "",
+            replies: []
+        });
 
           await saveState();
           render();
@@ -3011,6 +3120,206 @@ function renderOriginalSummary(term) {
         setStatus(`Não foi possível importar o ICMG.txt: ${error.message}`);
         return false;
       }
+    }
+
+    function safePdfText(value) {
+      return String(value ?? "")
+        .replaceAll("→", "->")
+        .replaceAll("–", "-")
+        .replaceAll("—", "-");
+    }
+
+    function pdfDateForFilename() {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function addPdfLine(doc, context, text, options = {}) {
+      const marginLeft = context.marginLeft;
+      const marginRight = context.marginRight;
+      const pageHeight = context.pageHeight;
+      const maxWidth = context.pageWidth - marginLeft - marginRight;
+      const lineHeight = options.lineHeight || 6;
+
+      if (options.fontSize) doc.setFontSize(options.fontSize);
+      if (options.fontStyle) doc.setFont("helvetica", options.fontStyle);
+
+      const lines = doc.splitTextToSize(safePdfText(text), maxWidth);
+
+      for (const line of lines) {
+        if (context.y > pageHeight - 18) {
+          doc.addPage();
+          context.y = 18;
+        }
+
+        doc.text(line, marginLeft, context.y);
+        context.y += lineHeight;
+      }
+
+      if (options.after) {
+        context.y += options.after;
+      }
+
+      doc.setFont("helvetica", "normal");
+    }
+
+    function addPdfSectionTitle(doc, context, title) {
+      context.y += 4;
+
+      if (context.y > context.pageHeight - 24) {
+        doc.addPage();
+        context.y = 18;
+      }
+
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(safePdfText(title), context.marginLeft, context.y);
+      context.y += 8;
+
+      doc.setFont("helvetica", "normal");
+    }
+
+    function actionTypeOrder(tipo) {
+      const order = {
+        [REVIEW_NOVO]: 1,
+        [REVIEW_MODIFICADO]: 2,
+        [REVIEW_EXCLUIR]: 3
+      };
+
+      return order[tipo] || 99;
+    }
+
+    function actionTypeTitle(tipo) {
+      if (tipo === REVIEW_NOVO) return "Novos termos";
+      if (tipo === REVIEW_MODIFICADO) return "Termos alterados";
+      if (tipo === REVIEW_EXCLUIR) return "Exclusões sugeridas";
+      return "Outras ações";
+    }
+
+    function sortedActionHistory() {
+      return (state.actionHistory || [])
+        .slice()
+        .sort((a, b) => {
+          const typeDiff = actionTypeOrder(a.tipo) - actionTypeOrder(b.tipo);
+          if (typeDiff !== 0) return typeDiff;
+
+          const decisionDiff = String(a.decisao || "").localeCompare(String(b.decisao || ""), "pt-BR");
+          if (decisionDiff !== 0) return decisionDiff;
+
+          return String(a.termo || "").localeCompare(String(b.termo || ""), "pt-BR");
+        });
+    }
+
+    function downloadHistoryPdf() {
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        alert("Não foi possível carregar a biblioteca de PDF. Verifique a conexão e tente novamente.");
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+      const context = {
+        marginLeft: 16,
+        marginRight: 16,
+        pageWidth: doc.internal.pageSize.getWidth(),
+        pageHeight: doc.internal.pageSize.getHeight(),
+        y: 18
+      };
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("Histórico da revisão - Thesaurus GCT-GDI", context.marginLeft, context.y);
+      context.y += 8;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Gerado por ${safePdfText(currentUser.value.trim() || "Usuário")} em ${safePdfText(nowLabel())}`, context.marginLeft, context.y);
+      context.y += 10;
+
+      const actions = sortedActionHistory();
+      const comments = (state.comments || []).slice()
+        .sort((a, b) => {
+          const termA = getTerm(a.termId);
+          const termB = getTerm(b.termId);
+          const nameA = termA ? displayTermName(termA) : "";
+          const nameB = termB ? displayTermName(termB) : "";
+          const nameDiff = nameA.localeCompare(nameB, "pt-BR");
+          if (nameDiff !== 0) return nameDiff;
+          return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
+        });
+
+      addPdfSectionTitle(doc, context, "Decisões");
+
+      if (!actions.length) {
+        addPdfLine(doc, context, "Nenhuma decisão registrada.", { fontSize: 10, after: 2 });
+      } else {
+        let currentType = "";
+
+        for (const action of actions) {
+          if (action.tipo !== currentType) {
+            currentType = action.tipo;
+            addPdfSectionTitle(doc, context, actionTypeTitle(currentType));
+          }
+
+          addPdfLine(doc, context, `Termo: ${action.termo || "Termo não identificado"}`, { fontSize: 11, fontStyle: "bold" });
+          addPdfLine(doc, context, `Caminho: ${action.caminho || "-"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Tipo: ${action.tipoLabel || action.tipo || "-"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Decisão: ${action.decisao === "aprovada" ? "aprovada" : "rejeitada"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Decidido por: ${action.decididoPor || "-"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Decidido em: ${action.decididoEm || "-"}`, { fontSize: 10 });
+
+          if (action.decisao === "aprovada") {
+            addPdfLine(doc, context, `STH: ${action.sthStatus === "feito" ? "feito" : "aguardando execução"}`, { fontSize: 10 });
+
+            if (action.sthStatus === "feito") {
+              addPdfLine(doc, context, `Feito no STH por: ${action.sthFeitoPor || "-"}`, { fontSize: 10 });
+              addPdfLine(doc, context, `Feito no STH em: ${action.sthFeitoEm || "-"}`, { fontSize: 10 });
+            }
+          }
+
+          if (Array.isArray(action.resumo) && action.resumo.length) {
+            addPdfLine(doc, context, "Resumo:", { fontSize: 10, fontStyle: "bold" });
+            action.resumo.forEach(item => {
+              addPdfLine(doc, context, `- ${item}`, { fontSize: 10 });
+            });
+          }
+
+          context.y += 4;
+        }
+      }
+
+      addPdfSectionTitle(doc, context, "Comentários e respostas");
+
+      if (!comments.length) {
+        addPdfLine(doc, context, "Nenhum comentário registrado.", { fontSize: 10 });
+      } else {
+        for (const comment of comments) {
+          const term = getTerm(comment.termId);
+
+          addPdfLine(doc, context, `Termo: ${term ? displayTermName(term) : "Termo não encontrado"}`, { fontSize: 11, fontStyle: "bold" });
+          addPdfLine(doc, context, `Caminho: ${term ? termPath(term) : "-"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Comentário de: ${comment.author || "Usuário"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Data: ${comment.createdAt || "-"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Situação: ${comment.visto ? "visto" : "não visto"}${comment.resolved ? " / resolvido" : ""}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Comentário: ${comment.text || "-"}`, { fontSize: 10 });
+
+          const replies = Array.isArray(comment.replies) ? comment.replies : [];
+
+          if (replies.length) {
+            addPdfLine(doc, context, "Respostas:", { fontSize: 10, fontStyle: "bold" });
+
+            replies.forEach(reply => {
+              addPdfLine(doc, context, `- ${reply.author || "Usuário"} em ${reply.createdAt || "-"}: ${reply.text || ""}`, { fontSize: 10 });
+            });
+          }
+
+          context.y += 4;
+        }
+      }
+
+      doc.save(`historico-tesauro-${pdfDateForFilename()}.pdf`);
     }
 
     // ============================================================
