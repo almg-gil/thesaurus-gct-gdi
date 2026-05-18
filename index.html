@@ -67,6 +67,67 @@
       background: var(--red-bg);
     }
 
+    body.logged-out header,
+    body.logged-out .app {
+      display: none;
+    }
+
+    body.logged-in #loginScreen {
+      display: none;
+    }
+
+    .login-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+    }
+
+    .login-card {
+      width: min(380px, calc(100vw - 32px));
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    .login-card h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      font-weight: normal;
+    }
+
+    .login-card .field {
+      margin-top: 14px;
+    }
+
+    .login-card button {
+      width: 100%;
+      margin-top: 10px;
+    }
+
+    .login-error {
+      color: var(--red);
+      min-height: 18px;
+      margin: 10px 0 0;
+      font-size: 13px;
+    }
+
+    .user-name-display {
+      color: #111;
+      font-weight: bold;
+    }
+
+    .profile-display {
+      color: var(--muted);
+    }
+
+    .logout-btn {
+      margin-left: 6px;
+    }
+
     input, textarea, select, button { font: inherit; }
 
     button {
@@ -492,7 +553,27 @@
     }
   </style>
 </head>
-<body>
+<body class="logged-out">
+  <div id="loginScreen" class="login-screen">
+  <form id="loginForm" class="login-card">
+    <h1>Tesauro GCT-GDI</h1>
+    <p class="muted">Informe sua matrícula e senha para acessar o sistema.</p>
+
+    <div class="field">
+      <label for="loginUsuario">Matrícula</label>
+      <input id="loginUsuario" type="text" autocomplete="username" autofocus placeholder="Ex.: m30267" />
+    </div>
+
+    <div class="field">
+      <label for="loginSenha">Senha</label>
+      <input id="loginSenha" type="password" autocomplete="current-password" />
+    </div>
+
+    <button id="loginBtn" type="submit" class="primary">Entrar</button>
+
+    <p id="loginError" class="login-error"></p>
+  </form>
+</div>
  <header>
   <strong>Tesauro GCT-GDI</strong>
 
@@ -501,9 +582,15 @@
   </div>
 
   <div class="user-area">
-    <span>Usuário:</span>
-    <input id="currentUser" type="text" value="Maria" aria-label="Usuário atual" />
-  </div>
+      <span>Usuário:</span>
+      <span id="currentUserDisplay" class="user-name-display"></span>
+      <span id="currentProfileDisplay" class="profile-display"></span>
+
+      <input id="currentUser" type="hidden" value="" />
+      <input id="currentProfile" type="hidden" value="" />
+
+      <button id="logoutBtn" class="logout-btn">Sair</button>
+</div>
 </header>
 
   <main class="app">
@@ -661,9 +748,13 @@
       comments: []
     };
 
-    let state = structuredClone(exemplo);
-    let draggedTermId = null;
-    let reviewMode = false;
+   let state = structuredClone(exemplo);
+  let draggedTermId = null;
+  let reviewMode = false;
+  let appStarted = false;
+  let currentProfileData = null;
+
+  const AUTH_EMAIL_DOMAIN = "@almg.local";
 
     let termById = new Map();
     let childrenByParent = new Map();
@@ -681,6 +772,17 @@
     const newParent = document.getElementById("newParent");
     const addTermBtn = document.getElementById("addTermBtn");
     const currentUser = document.getElementById("currentUser");
+    const currentProfile = document.getElementById("currentProfile");
+    const currentUserDisplay = document.getElementById("currentUserDisplay");
+    const currentProfileDisplay = document.getElementById("currentProfileDisplay");
+    const logoutBtn = document.getElementById("logoutBtn");
+
+    const loginScreen = document.getElementById("loginScreen");
+    const loginForm = document.getElementById("loginForm");
+    const loginUsuario = document.getElementById("loginUsuario");
+    const loginSenha = document.getElementById("loginSenha");
+    const loginError = document.getElementById("loginError");
+
     const exportBtn = document.getElementById("exportBtn");
     const importBtn = document.getElementById("importBtn");
     const importIcmgBtn = document.getElementById("importIcmgBtn");
@@ -732,6 +834,143 @@
     
     function setStatus(message) {
       statusMessage.textContent = message || "";
+    }
+
+    function matriculaParaEmail(matricula) {
+      return `${String(matricula || "").trim().toLowerCase()}${AUTH_EMAIL_DOMAIN}`;
+    }
+
+    function mostrarTelaLogin() {
+      document.body.classList.remove("logged-in");
+      document.body.classList.add("logged-out");
+
+      loginError.textContent = "";
+      loginSenha.value = "";
+
+      setTimeout(() => loginUsuario.focus(), 0);
+    }
+
+    function mostrarApp() {
+      document.body.classList.remove("logged-out");
+      document.body.classList.add("logged-in");
+    }
+
+    function setLoggedInProfile(profile) {
+      currentProfileData = profile;
+
+      currentUser.value = profile.nome;
+      currentProfile.value = profile.perfil;
+
+      currentUserDisplay.textContent = profile.nome;
+      currentProfileDisplay.textContent = `(${profile.perfil})`;
+    }
+    
+    async function carregarPerfilUsuario(authUser) {
+      const { data, error } = await db
+        .from("app_profiles")
+        .select("matricula, nome, perfil, ativo")
+        .eq("id", authUser.id)
+        .single();
+
+      if (error) {
+        console.error(error);
+        throw new Error("Não foi possível carregar o perfil do usuário.");
+      }
+
+      if (!data || data.ativo !== true) {
+        throw new Error("Usuário sem perfil ativo.");
+      }
+
+      return data;
+    }
+
+    async function iniciarComUsuarioAutenticado(authUser) {
+      const profile = await carregarPerfilUsuario(authUser);
+
+      setLoggedInProfile(profile);
+      mostrarApp();
+
+      if (!appStarted) {
+        appStarted = true;
+        initResizableLayout();
+        await iniciarApp();
+      }
+    }
+
+    async function fazerLogin() {
+      const matricula = loginUsuario.value.trim().toLowerCase();
+      const senha = loginSenha.value;
+
+      if (!matricula || !senha) {
+        loginError.textContent = "Informe matrícula e senha.";
+        return;
+      }
+
+      loginError.textContent = "Entrando...";
+
+      const { data, error } = await db.auth.signInWithPassword({
+        email: matriculaParaEmail(matricula),
+        password: senha
+      });
+
+      if (error) {
+        console.error(error);
+        loginError.textContent = "Matrícula ou senha inválida.";
+        loginSenha.value = "";
+        loginSenha.focus();
+        return;
+      }
+
+      try {
+        await iniciarComUsuarioAutenticado(data.user);
+        loginError.textContent = "";
+      } catch (profileError) {
+        console.error(profileError);
+        await db.auth.signOut();
+        loginError.textContent = profileError.message;
+        mostrarTelaLogin();
+      }
+    }
+
+    async function fazerLogout() {
+      await db.auth.signOut();
+
+      currentProfileData = null;
+      currentUser.value = "";
+      currentProfile.value = "";
+      currentUserDisplay.textContent = "";
+      currentProfileDisplay.textContent = "";
+
+      mostrarTelaLogin();
+    }
+
+    async function initAuth() {
+      loginForm.addEventListener("submit", event => {
+        event.preventDefault();
+        fazerLogin();
+      });
+
+      logoutBtn.addEventListener("click", fazerLogout);
+
+      const { data, error } = await db.auth.getSession();
+
+      if (error) {
+        console.error(error);
+        mostrarTelaLogin();
+        return;
+      }
+
+      if (data.session?.user) {
+        try {
+          await iniciarComUsuarioAutenticado(data.session.user);
+        } catch (profileError) {
+          console.error(profileError);
+          await db.auth.signOut();
+          mostrarTelaLogin();
+        }
+      } else {
+        mostrarTelaLogin();
+      }
     }
 
     async function loadState() {
@@ -2691,8 +2930,7 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
       }
     }
 
-    initResizableLayout();
-    iniciarApp();
+    initAuth();
   </script>
 </body>
 </html>
