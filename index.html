@@ -1873,42 +1873,6 @@ function renderOriginalSummary(term) {
   `;
 }
 
-  const originalParent = getTerm(term.original.parentId);
-  const currentParent = getTerm(term.parentId);
-
-  const linhas = [];
-
-  if (term.original.termo !== term.termo) {
-    linhas.push(`Nome anterior: ${term.original.termo}`);
-  }
-
-  if ((term.original.parentId || null) !== (term.parentId || null)) {
-    linhas.push(`Termo geral anterior: ${originalParent ? originalParent.termo : "Sem termo geral"}`);
-    linhas.push(`Termo geral atual: ${currentParent ? currentParent.termo : "Sem termo geral"}`);
-  }
-
-  if ((term.original.definicao || "") !== (term.definicao || "")) {
-    linhas.push("Definição alterada");
-  }
-
-  if ((term.original.notaEscopo || "") !== (term.notaEscopo || "")) {
-    linhas.push("Nota Explicativa alterada");
-  }
-
-  if ((term.original.notaUso || "") !== (term.notaUso || "")) {
-    linhas.push("Nota Histórica alterada");
-  }
-
-  if (!linhas.length) {
-    return "";
-  }
-
-  return `
-    <ul class="small-list">
-      ${linhas.map(linha => `<li>${escapeHtml(linha)}</li>`).join("")}
-    </ul>
-  `;
-}
 
     function pendingSummaryLines(term) {
       if (term.revisao === REVIEW_NOVO) {
@@ -2350,6 +2314,7 @@ function renderOriginalSummary(term) {
         </ul>
       `;
 
+    }
     function renderPendingPanel(termFilter = null) {
       const pending = termFilter
         ? (isTermPending(termFilter) ? [termFilter] : [])
