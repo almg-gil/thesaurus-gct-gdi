@@ -1766,9 +1766,14 @@ function renderOriginalSummary(term) {
             </div>
 
             <div id="pendencias" class="panel">
-              ${renderPendingPanel(term)}
+              <div id="termPendingList"></div>
             </div>
-          `;
+            `;
+
+      const termPendingList = document.getElementById("termPendingList");
+      if (termPendingList) {
+        termPendingList.innerHTML = renderPendingPanel(getTerm(state.selectedId));
+      }
 
       wireTermArea(term);
     }
@@ -1929,14 +1934,21 @@ function renderOriginalSummary(term) {
     }
 
     function wireTermArea(term) {
-      document.querySelectorAll(".tab").forEach(tab => {
-        tab.addEventListener("click", () => {
-          document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-          document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
-          tab.classList.add("active");
-          document.getElementById(tab.dataset.tab).classList.add("active");
+        termArea.querySelectorAll(".tab").forEach(tab => {
+          tab.addEventListener("click", () => {
+            const targetId = tab.dataset.tab;
+
+            termArea.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+            termArea.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+
+            tab.classList.add("active");
+
+            const targetPanel = termArea.querySelector(`#${targetId}`);
+            if (targetPanel) {
+              targetPanel.classList.add("active");
+            }
+          });
         });
-      });
 
       const saveBtn = document.getElementById("saveTermBtn");
       if (saveBtn) {
