@@ -773,7 +773,6 @@
     const currentUser = document.getElementById("currentUser");
     const currentProfile = document.getElementById("currentProfile");
     const currentUserDisplay = document.getElementById("currentUserDisplay");
-    const currentProfileDisplay = document.getElementById("currentProfileDisplay");
     const logoutBtn = document.getElementById("logoutBtn");
 
     const loginScreen = document.getElementById("loginScreen");
@@ -861,7 +860,6 @@
       currentProfile.value = profile.perfil;
 
       currentUserDisplay.textContent = profile.nome;
-      currentProfileDisplay.textContent = `(${profile.perfil})`;
     }
     
     async function carregarPerfilUsuario(authUser) {
@@ -938,7 +936,6 @@
       currentUser.value = "";
       currentProfile.value = "";
       currentUserDisplay.textContent = "";
-      currentProfileDisplay.textContent = "";
 
       mostrarTelaLogin();
     }
