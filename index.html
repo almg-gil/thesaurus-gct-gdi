@@ -2770,7 +2770,10 @@ function renderOriginalSummary(term) {
 
         if (!finalValue) return;
 
-        const key = normalizeSearchText(finalValue);
+        // Aqui NÃO pode usar normalizeSearchText como chave,
+        // senão "Administração Pública" e "administracao publica"
+        // viram a mesma chave e a opção sem acento é descartada.
+        const key = finalValue.toLowerCase();
 
         if (usedValues.has(key)) return;
 
@@ -2788,15 +2791,12 @@ function renderOriginalSummary(term) {
         .forEach(t => {
           const termoOriginal = String(t.termo || "").trim();
           const termoNormalizado = normalizeSearchText(termoOriginal);
-          const termoOriginalComparavel = termoOriginal.toLowerCase();
 
-          // Opção com o nome oficial, com acentos.
+          // Opção oficial, com acento.
           addOption(termoOriginal);
 
-          // Opção auxiliar sem acentos e sem caracteres especiais.
-          // Ex.: "Área de Preservação Permanente (APP)"
-          // entra também como "area de preservacao permanente app".
-          if (termoNormalizado && termoNormalizado !== termoOriginalComparavel) {
+          // Opção auxiliar, sem acento e sem caracteres especiais.
+          if (termoNormalizado && termoNormalizado !== termoOriginal.toLowerCase()) {
             addOption(termoNormalizado, termoOriginal);
           }
         });
