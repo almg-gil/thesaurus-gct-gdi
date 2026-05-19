@@ -476,6 +476,16 @@
     .review-badge.novo { color: var(--green); border-color: var(--green); }
     .review-badge.excluir { color: var(--red); border-color: var(--red); }
 
+    .search-match-badge {
+      font-size: 12px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: #fff;
+      font-weight: normal;
+    }
+
     .add-box {
       margin-top: 12px;
       border-top: 1px solid var(--border);
@@ -2305,11 +2315,38 @@ function renderOriginalSummary(term) {
     }
 
     function matchesTerm(term, query) {
-      const text = [term.termo, term.conceito, term.definicao, term.notaEscopo, term.notaUso]
-        .join(" ")
-        .toLowerCase();
-      return text.includes(query.toLowerCase());
+      const normalizedQuery = normalizeSearchText(query);
+
+      if (!normalizedQuery) return true;
+
+      const upTerms = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      const text = [
+        term.termo,
+        term.termoAnterior,
+        term.conceito,
+        term.definicao,
+        term.notaEscopo,
+        term.notaUso,
+        ...upTerms
+      ].join(" ");
+
+      return normalizeSearchText(text).includes(normalizedQuery);
     }
+
+    function matchingUpValues(term, query) {
+      const normalizedQuery = normalizeSearchText(query);
+
+      if (!normalizedQuery) return [];
+
+      const upTerms = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      return upTerms.filter(up => normalizeSearchText(up).includes(normalizedQuery));
+     }
 
     function canMoveTerm(dragId, newParentId) {
       if (!dragId) return false;
@@ -2452,6 +2489,16 @@ function renderOriginalSummary(term) {
 
       item.appendChild(toggle);
       item.appendChild(label);
+
+      const upMatches = matchingUpValues(term, query);
+
+      if (upMatches.length) {
+        const upBadge = document.createElement("span");
+        upBadge.className = "search-match-badge";
+        upBadge.textContent = `UP: ${upMatches[0]}${upMatches.length > 1 ? ` +${upMatches.length - 1}` : ""}`;
+        upBadge.title = upMatches.join("; ");
+        item.appendChild(upBadge);
+      }
 
       if (term.revisao && term.revisao !== REVIEW_ORIGINAL) {
         const badge = document.createElement("span");
@@ -3676,6 +3723,16 @@ async function rejectPendingChange(changeId) {
       "sem classe",
       "estrutura administrativa"
     ]);
+
+    function normalizeSearchText(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    }
 
     function isClasseIcmgIgnorada(classe) {
       return ICMG_CLASSES_IGNORADAS.has(normalizeIcmgName(classe));
