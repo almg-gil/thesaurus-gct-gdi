@@ -693,25 +693,52 @@
       line-height: 1.5;
     }
 
+    .change-summary {
+      margin: 10px 0 14px 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--blue);
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .change-summary-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .change-summary-block {
+      margin-top: 10px;
+    }
+
+    .change-summary-label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .change-summary-text {
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+
     .review-summary li,
       .pending-summary li {
-        margin-bottom: 12px;
+         margin-bottom: 12px;
       }
 
       .review-summary li:last-child,
       .pending-summary li:last-child {
         margin-bottom: 0;
-      }
+       }
 
-    .export-box {
-      margin-top: 16px;
-      border-top: 1px solid var(--border);
-      padding-top: 10px;
-    }
+        .export-box {
+          margin-top: 16px;
+          border-top: 1px solid var(--border);
+          padding-top: 10px;
+        }
 
-    .export-box {
-      display: none;
-      margin-top: 16px;
+        .export-box {
+          display: none;
+          margin-top: 16px;
       border-top: 1px solid var(--border);
       padding-top: 10px;
     }
@@ -1515,12 +1542,16 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       return state.terms.filter(t => t.revisao && t.revisao !== REVIEW_ORIGINAL);
     }
 
+    function pendingActionItems() {
+      return getPendingTerms().flatMap(term => pendingChangeItems(term));
+    }
+
     function unseenComments() {
       return state.comments.filter(comment => comment.visto !== true);
     }
 
     function managementCount() {
-      return pendingTerms().length + unseenComments().length;
+      return pendingActionItems().length + unseenComments().length;
     }
 
     function isTermPending(term) {
@@ -1626,7 +1657,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
         return `
           <div class="pending-list">
-            ${pendentes.map(renderPendingItemHtml).join("")}
+            ${pendentes.map(renderPendingChangeItemHtml).join("")}
           </div>
         `;
       }
@@ -1813,6 +1844,16 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
             return;
           }
 
+          if (action === "approve-change") {
+            await approvePendingChange(btn.dataset.changeId);
+            return;
+          }
+
+          if (action === "reject-change") {
+            await rejectPendingChange(btn.dataset.changeId);
+            return;
+          }
+
           if (action === "approve") {
             await approvePending(termId);
             return;
@@ -1820,6 +1861,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           if (action === "reject") {
             await rejectPending(termId);
+            return;
           }
         };
       });
@@ -1907,26 +1949,27 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       render();
     }
 
-function renderPendingItemHtml(term) {
-  const tipo = reviewLabel(term.revisao);
-  const caminho = termPath(term);
+function renderPendingChangeItemHtml(change) {
+  const term = getTerm(change.termId);
+  if (!term) return "";
 
   return `
     <div class="relation-box">
       <div class="comment-head">
         <div>
           <strong>${escapeHtml(displayTermName(term))}</strong>
-          <div class="muted">${escapeHtml(caminho)}</div>
+          <div class="muted">${escapeHtml(termPath(term))}</div>
+          ${term.revisaoPor || term.revisaoEm ? `<div class="muted">Registrado por ${escapeHtml(term.revisaoPor || "Usuário")} ${term.revisaoEm ? `em ${escapeHtml(term.revisaoEm)}` : ""}</div>` : ""}
         </div>
-        <span class="review-badge ${escapeAttr(term.revisao)}">${escapeHtml(tipo)}</span>
+        <span class="review-badge ${escapeAttr(change.type || "")}">${escapeHtml(change.typeLabel || "alteração")}</span>
       </div>
 
-      ${renderOriginalSummary(term)}
+      ${renderChangeSummaryHtml(change)}
 
       <div class="toolbar">
         <button data-pending-action="view" data-term-id="${escapeAttr(term.id)}">Ver termo</button>
-        <button class="success" data-pending-action="approve" data-term-id="${escapeAttr(term.id)}">Aprovar</button>
-        <button class="danger" data-pending-action="reject" data-term-id="${escapeAttr(term.id)}">Rejeitar</button>
+        <button class="success" data-pending-action="approve-change" data-change-id="${escapeAttr(change.id)}">Aprovar</button>
+        <button class="danger" data-pending-action="reject-change" data-change-id="${escapeAttr(change.id)}">Rejeitar</button>
       </div>
     </div>
   `;
@@ -1937,22 +1980,195 @@ function normalizeDiffValue(value) {
   return String(value || "").trim();
 }
 
-function makeFieldDiff(label, oldValue, newValue) {
-  const atual = normalizeDiffValue(oldValue);
-  const sugestao = normalizeDiffValue(newValue);
-
-  if (atual === sugestao) return null;
-
-  return `${label} alterada:\nAtual: ${atual || "—"}\nSugestão: ${sugestao || "—"}`;
+function sameList(a, b) {
+  return JSON.stringify((a || []).map(String)) === JSON.stringify((b || []).map(String));
 }
 
-function makeSimpleDiff(label, oldValue, newValue) {
-  const atual = normalizeDiffValue(oldValue);
-  const sugestao = normalizeDiffValue(newValue);
+function listAddedItems(originalList, currentList) {
+  const originalSet = new Set((originalList || []).map(String));
+  return (currentList || []).map(String).filter(item => !originalSet.has(item));
+}
 
-  if (atual === sugestao) return null;
+function listRemovedItems(originalList, currentList) {
+  const currentSet = new Set((currentList || []).map(String));
+  return (originalList || []).map(String).filter(item => !currentSet.has(item));
+}
 
-  return `${label} alterado:\nAtual: ${atual || "—"}\nSugestão: ${sugestao || "—"}`;
+function changeTextForHistory(change) {
+  if (change.kind === "field" || change.kind === "parent") {
+    return `${change.title}\nAtual: ${change.currentValue || "—"}\nSugestão: ${change.suggestedValue || "—"}`;
+  }
+
+  return change.title;
+}
+
+function renderChangeSummaryHtml(change) {
+  if (change.kind === "field" || change.kind === "parent") {
+    return `
+      <div class="change-summary">
+        <div class="change-summary-title">${escapeHtml(change.title)}</div>
+
+        <div class="change-summary-block">
+          <span class="change-summary-label">Atual:</span>
+          <div class="change-summary-text">${escapeHtml(change.currentValue || "—")}</div>
+        </div>
+
+        <div class="change-summary-block">
+          <span class="change-summary-label">Sugestão:</span>
+          <div class="change-summary-text">${escapeHtml(change.suggestedValue || "—")}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="change-summary">
+      <div class="change-summary-title">${escapeHtml(change.title)}</div>
+    </div>
+  `;
+}
+
+function pendingChangeItems(term) {
+  if (!term || !isTermPending(term)) return [];
+
+  if (term.revisao === REVIEW_NOVO) {
+    return [{
+      id: `${term.id}::novo`,
+      termId: term.id,
+      kind: "whole-new",
+      title: `Novo termo: ${term.termo || "—"}`,
+      type: term.revisao,
+      typeLabel: reviewLabel(term.revisao)
+    }];
+  }
+
+  if (term.revisao === REVIEW_EXCLUIR) {
+    return [{
+      id: `${term.id}::excluir`,
+      termId: term.id,
+      kind: "whole-delete",
+      title: "Exclusão sugerida para este termo.",
+      type: term.revisao,
+      typeLabel: reviewLabel(term.revisao)
+    }];
+  }
+
+  const original = term.original;
+  if (!original) {
+    return [{
+      id: `${term.id}::sem-original`,
+      termId: term.id,
+      kind: "unknown",
+      title: "Alteração registrada sem cópia anterior disponível.",
+      type: term.revisao,
+      typeLabel: reviewLabel(term.revisao)
+    }];
+  }
+
+  const changes = [];
+
+  function addFieldChange(field, title, currentValue, suggestedValue) {
+    const atual = normalizeDiffValue(currentValue);
+    const sugestao = normalizeDiffValue(suggestedValue);
+
+    if (atual === sugestao) return;
+
+    changes.push({
+      id: `${term.id}::field::${field}`,
+      termId: term.id,
+      kind: "field",
+      field,
+      title,
+      currentValue: atual || "—",
+      suggestedValue: sugestao || "—",
+      type: term.revisao,
+      typeLabel: reviewLabel(term.revisao)
+    });
+  }
+
+  addFieldChange("termo", "Nome alterado", original.termo, term.termo);
+
+  if ((original.parentId || null) !== (term.parentId || null)) {
+    changes.push({
+      id: `${term.id}::parent`,
+      termId: term.id,
+      kind: "parent",
+      field: "parentId",
+      title: "Termo geral alterado",
+      currentValue: getTermNameForSummary(original.parentId),
+      suggestedValue: getTermNameForSummary(term.parentId),
+      type: term.revisao,
+      typeLabel: reviewLabel(term.revisao)
+    });
+  }
+
+  addFieldChange("definicao", "Definição alterada", original.definicao, term.definicao);
+  addFieldChange("notaEscopo", "Nota Explicativa alterada", original.notaEscopo, term.notaEscopo);
+  addFieldChange("notaUso", "Nota Histórica alterada", original.notaUso, term.notaUso);
+
+  if (!sameList(original.relacionados, term.relacionados)) {
+    const adicionados = listAddedItems(original.relacionados, term.relacionados);
+    const removidos = listRemovedItems(original.relacionados, term.relacionados);
+
+    adicionados.forEach(id => {
+      changes.push({
+        id: `${term.id}::tr-add::${id}`,
+        termId: term.id,
+        kind: "list-add",
+        field: "relacionados",
+        item: id,
+        title: `Sinônimo autorizado (TR) adicionado: ${getTermNameForSummary(id)}`,
+        type: term.revisao,
+        typeLabel: reviewLabel(term.revisao)
+      });
+    });
+
+    removidos.forEach(id => {
+      changes.push({
+        id: `${term.id}::tr-remove::${id}`,
+        termId: term.id,
+        kind: "list-remove",
+        field: "relacionados",
+        item: id,
+        title: `Sinônimo autorizado (TR) sugerido para retirada: ${getTermNameForSummary(id)}`,
+        type: term.revisao,
+        typeLabel: reviewLabel(term.revisao)
+      });
+    });
+  }
+
+  if (!sameList(original.relacionadosNaoAutorizados, term.relacionadosNaoAutorizados)) {
+    const adicionados = listAddedItems(original.relacionadosNaoAutorizados, term.relacionadosNaoAutorizados);
+    const removidos = listRemovedItems(original.relacionadosNaoAutorizados, term.relacionadosNaoAutorizados);
+
+    adicionados.forEach(value => {
+      changes.push({
+        id: `${term.id}::up-add::${value}`,
+        termId: term.id,
+        kind: "list-add",
+        field: "relacionadosNaoAutorizados",
+        item: value,
+        title: `Termo não autorizado (UP) adicionado: ${value}`,
+        type: term.revisao,
+        typeLabel: reviewLabel(term.revisao)
+      });
+    });
+
+    removidos.forEach(value => {
+      changes.push({
+        id: `${term.id}::up-remove::${value}`,
+        termId: term.id,
+        kind: "list-remove",
+        field: "relacionadosNaoAutorizados",
+        item: value,
+        title: `Termo não autorizado (UP) sugerido para retirada: ${value}`,
+        type: term.revisao,
+        typeLabel: reviewLabel(term.revisao)
+      });
+    });
+  }
+
+  return changes;
 }
 
 function listAddedItems(originalList, currentList) {
@@ -2016,86 +2232,18 @@ function relationshipChangeLines(options) {
 }
     
 function renderOriginalSummary(term) {
-  const lines = pendingSummaryLines(term);
+  const changes = pendingChangeItems(term);
 
-  if (!lines.length) {
+  if (!changes.length) {
     return "";
   }
 
-  return `
-    <ul class="small-list review-summary">
-      ${lines.map(line => `<li>${escapeHtml(line).split("\\n").join("<br>")}</li>`).join("")}
-    </ul>
-  `;
+  return changes.map(renderChangeSummaryHtml).join("");
 }
-      function pendingSummaryLines(term) {
-        if (term.revisao === REVIEW_NOVO) {
-          return [
-            `Novo termo em: ${getTermNameForSummary(term.parentId)}`,
-            `Termo criado: ${term.termo || "—"}`,
-            term.definicao ? `Definição: ${term.definicao}` : "",
-            term.notaEscopo ? `Nota Explicativa: ${term.notaEscopo}` : "",
-            term.notaUso ? `Nota Histórica: ${term.notaUso}` : ""
-          ].filter(Boolean);
+      
+        function pendingSummaryLines(term) {
+          return pendingChangeItems(term).map(changeTextForHistory);
         }
-
-        if (term.revisao === REVIEW_EXCLUIR) {
-          return [
-            "Exclusão sugerida para este termo.",
-            `Termo: ${term.termo || "—"}`,
-            `Caminho: ${termPath(term) || "—"}`
-          ];
-        }
-
-        const original = term.original;
-
-        if (!original) {
-          return ["Alteração registrada sem cópia anterior disponível."];
-        }
-
-        const changes = [];
-
-        const nomeDiff = makeSimpleDiff("Nome", original.termo, term.termo);
-        if (nomeDiff) changes.push(nomeDiff);
-
-        if ((original.parentId || null) !== (term.parentId || null)) {
-          changes.push(
-            `Termo geral alterado:\nAtual: ${getTermNameForSummary(original.parentId)}\nSugestão: ${getTermNameForSummary(term.parentId)}`
-          );
-        }
-
-        const definicaoDiff = makeFieldDiff("Definição", original.definicao, term.definicao);
-        if (definicaoDiff) changes.push(definicaoDiff);
-
-        const notaExplicativaDiff = makeFieldDiff("Nota Explicativa", original.notaEscopo, term.notaEscopo);
-        if (notaExplicativaDiff) changes.push(notaExplicativaDiff);
-
-        const notaHistoricaDiff = makeFieldDiff("Nota Histórica", original.notaUso, term.notaUso);
-        if (notaHistoricaDiff) changes.push(notaHistoricaDiff);
-
-        changes.push(
-          ...relationshipChangeLines({
-            originalList: original.relacionados || [],
-            currentList: term.relacionados || [],
-            singularLabel: "Sinônimo autorizado (TR)",
-            pluralLabel: "Sinônimos autorizados (TR)",
-            formatter: formatTermIdList
-          })
-          );
-
-        changes.push(
-          ...relationshipChangeLines({
-            originalList: original.relacionadosNaoAutorizados || [],
-            currentList: term.relacionadosNaoAutorizados || [],
-            singularLabel: "Termo não autorizado (UP)",
-            pluralLabel: "Termos não autorizados (UP)",
-            formatter: formatTextList
-          })
-        );
-
-        return changes.length ? changes : ["Alteração registrada."];
-      }
-
     
         function createActionHistoryItem(term, decisao) {
           const resumo = pendingSummaryLines(term);
@@ -2353,7 +2501,7 @@ function renderOriginalSummary(term) {
 
       const deleteButtonLabel = term.revisao === REVIEW_EXCLUIR ? "Cancelar sugestão de exclusão" : "Sugerir exclusão";
       const deleteButtonClass = term.revisao === REVIEW_EXCLUIR ? "success" : "danger";
-      const pendingCount = isTermPending(term) ? 1 : 0;
+      const pendingCount = pendingChangeItems(term).length;
 
       termArea.innerHTML = `
         <div class="term-header">
@@ -2469,8 +2617,8 @@ function renderOriginalSummary(term) {
     }
     function renderPendingPanel(termFilter = null) {
       const pending = termFilter
-        ? (isTermPending(termFilter) ? [termFilter] : [])
-        : getPendingTerms();
+        ? pendingChangeItems(termFilter)
+        : pendingActionItems();
 
       if (!pending.length) {
         return '<div class="empty">Não há pendências para este termo.</div>';
@@ -2478,22 +2626,7 @@ function renderOriginalSummary(term) {
 
       return `
         <div class="pending-list">
-          ${pending.map(term => `
-            <div class="pending-card review-${term.revisao}">
-              <div class="pending-title">
-                <span class="review-badge ${term.revisao}">${escapeHtml(reviewLabel(term.revisao))}</span>
-                <strong>${escapeHtml(displayTermName(term))}</strong>
-              </div>
-              <div class="muted">${escapeHtml(termPath(term))}</div>
-              ${term.revisaoPor || term.revisaoEm ? `<div class="muted">Registrado por ${escapeHtml(term.revisaoPor || "Usuário")} ${term.revisaoEm ? `em ${escapeHtml(term.revisaoEm)}` : ""}</div>` : ""}
-              ${renderPendingSummary(term)}
-              <div class="toolbar">
-                <button data-pending-action="view" data-term-id="${term.id}">Ver termo</button>
-                <button class="success" data-pending-action="approve" data-term-id="${term.id}">Aprovar</button>
-                <button class="danger" data-pending-action="reject" data-term-id="${term.id}">Rejeitar</button>
-              </div>
-            </div>
-          `).join("")}
+          ${pending.map(renderPendingChangeItemHtml).join("")}
         </div>
       `;
     }
@@ -3371,14 +3504,25 @@ function renderOriginalSummary(term) {
           return;
         }
 
-          if (action === "approve") {
-            await approvePending(termId);
+          if (action === "approve-change") {
+            await approvePendingChange(btn.dataset.changeId);
             return;
           }
 
-          if (action === "reject") {
-            await rejectPending(termId);
-          }
+          if (action === "reject-change") {
+            await rejectPendingChange(btn.dataset.changeId);
+            return;
+        }
+
+        if (action === "approve") {
+          await approvePending(termId);
+          return;
+        }
+
+        if (action === "reject") {
+          await rejectPending(termId);
+          return;
+        }
         };
       });
     }
@@ -3394,6 +3538,143 @@ function renderOriginalSummary(term) {
         state.selectedId = state.terms[0]?.id || null;
       }
     }
+
+    function findPendingChangeById(changeId) {
+  return pendingActionItems().find(change => change.id === changeId) || null;
+}
+
+function refreshReviewAfterSingleChange(term) {
+  if (!term) return;
+
+  if (term.revisao === REVIEW_NOVO || term.revisao === REVIEW_EXCLUIR) {
+    return;
+  }
+
+  const remaining = pendingChangeItems(term);
+
+  if (!remaining.length) {
+    clearReview(term);
+  }
+}
+
+function createActionHistoryItemFromChange(term, change, decisao) {
+  return {
+    id: uid("action"),
+    termId: term.id,
+    termo: displayTermName(term),
+    caminho: termPath(term),
+    tipo: term.revisao,
+    tipoLabel: reviewLabel(term.revisao),
+    decisao,
+    decididoPor: currentUser.value.trim() || "Usuário",
+    decididoEm: nowLabel(),
+    resumo: [changeTextForHistory(change)],
+    original: term.original ? structuredClone(term.original) : null,
+    final: snapshotTerm(term),
+    sthStatus: decisao === "aprovada" ? "aguardando" : "nao_aplicavel",
+    sthFeitoPor: "",
+    sthFeitoEm: ""
+  };
+}
+
+function registrarDecisaoMudanca(term, change, decisao) {
+  state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory : [];
+  state.actionHistory.push(createActionHistoryItemFromChange(term, change, decisao));
+}
+
+async function approvePendingChange(changeId) {
+  if (!userCanAccessManagement()) {
+    alert("Você não tem permissão para aprovar ações.");
+    return;
+  }
+
+  const change = findPendingChangeById(changeId);
+  if (!change) return;
+
+  const term = getTerm(change.termId);
+  if (!term) return;
+
+  if (change.kind === "whole-new" || change.kind === "whole-delete") {
+    await approvePending(term.id);
+    return;
+  }
+
+  if (!term.original) return;
+
+  registrarDecisaoMudanca(term, change, "aprovada");
+
+  if (change.kind === "field" || change.kind === "parent") {
+    term.original[change.field] = term[change.field] || null;
+
+    if (change.field === "termo") {
+      term.termoAnterior = "";
+    }
+  }
+
+  if (change.kind === "list-add") {
+    term.original[change.field] = addUniqueValue(term.original[change.field], change.item);
+  }
+
+  if (change.kind === "list-remove") {
+    term.original[change.field] = removeValue(term.original[change.field], change.item);
+  }
+
+  refreshReviewAfterSingleChange(term);
+
+  await saveState();
+  render();
+
+  if (!reviewMode) {
+    setActiveTab("pendencias");
+  }
+}
+
+async function rejectPendingChange(changeId) {
+  if (!userCanAccessManagement()) {
+    alert("Você não tem permissão para rejeitar ações.");
+    return;
+  }
+
+  const change = findPendingChangeById(changeId);
+  if (!change) return;
+
+  const term = getTerm(change.termId);
+  if (!term) return;
+
+  if (change.kind === "whole-new" || change.kind === "whole-delete") {
+    await rejectPending(term.id);
+    return;
+  }
+
+  if (!term.original) return;
+
+  registrarDecisaoMudanca(term, change, "rejeitada");
+
+  if (change.kind === "field" || change.kind === "parent") {
+    term[change.field] = term.original[change.field] || null;
+
+    if (change.field === "termo") {
+      term.termoAnterior = "";
+    }
+  }
+
+  if (change.kind === "list-add") {
+    term[change.field] = removeValue(term[change.field], change.item);
+  }
+
+  if (change.kind === "list-remove") {
+    term[change.field] = addUniqueValue(term[change.field], change.item);
+  }
+
+  refreshReviewAfterSingleChange(term);
+
+  await saveState();
+  render();
+
+  if (!reviewMode) {
+    setActiveTab("pendencias");
+  }
+}
 
     async function approvePending(termId) {
 
