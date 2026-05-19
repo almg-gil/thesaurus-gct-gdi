@@ -2763,36 +2763,57 @@ function renderOriginalSummary(term) {
     function renderTermDatalist(datalistId, excludeIds = []) {
       const excluded = new Set(excludeIds.map(String));
 
+      const options = [];
+
+      state.terms
+        .filter(t => t.revisao !== REVIEW_EXCLUIR && !excluded.has(String(t.id)))
+        .slice()
+        .sort((a, b) => a.termo.localeCompare(b.termo, "pt-BR"))
+        .forEach(t => {
+          const termoOriginal = t.termo;
+          const termoNormalizado = normalizeSearchText(t.termo);
+
+          options.push(`<option value="${escapeAttr(termoOriginal)}"></option>`);
+
+          if (termoNormalizado && termoNormalizado !== normalizeSearchText(termoOriginal)) {
+            options.push(`<option value="${escapeAttr(termoNormalizado)}" label="${escapeAttr(termoOriginal)}"></option>`);
+          }
+        });
+
       return `
         <datalist id="${escapeAttr(datalistId)}">
-          ${state.terms
-            .filter(t => t.revisao !== REVIEW_EXCLUIR && !excluded.has(String(t.id)))
-            .slice()
-            .sort((a, b) => a.termo.localeCompare(b.termo, "pt-BR"))
-            .map(t => `<option value="${escapeAttr(t.termo)}"></option>`)
-            .join("")}
+          ${options.join("")}
         </datalist>
       `;
     }
 
     function findTermIdByTypedValue(value) {
-      const typed = normalizeIcmgName(value);
+      const typed = normalizeSearchText(value);
 
       if (!typed) return null;
 
-      const exactName = state.terms.find(t =>
-        t.revisao !== REVIEW_EXCLUIR &&
-        normalizeIcmgName(t.termo) === typed
-      );
+      const candidates = state.terms
+        .filter(t => t.revisao !== REVIEW_EXCLUIR)
+        .map(t => ({
+          term: t,
+          termoNormalizado: normalizeSearchText(t.termo),
+          caminhoNormalizado: normalizeSearchText(termPath(t))
+        }));
 
-      if (exactName) return exactName.id;
+      const exactName = candidates.find(item => item.termoNormalizado === typed);
+      if (exactName) return exactName.term.id;
 
-      const exactPath = state.terms.find(t =>
-        t.revisao !== REVIEW_EXCLUIR &&
-        normalizeIcmgName(termPath(t)) === typed
-      );
+      const exactPath = candidates.find(item => item.caminhoNormalizado === typed);
+      if (exactPath) return exactPath.term.id;
 
-      if (exactPath) return exactPath.id;
+      const startsWithName = candidates.filter(item => item.termoNormalizado.startsWith(typed));
+      if (startsWithName.length === 1) return startsWithName[0].term.id;
+
+      const includesName = candidates.filter(item => item.termoNormalizado.includes(typed));
+      if (includesName.length === 1) return includesName[0].term.id;
+
+      const includesPath = candidates.filter(item => item.caminhoNormalizado.includes(typed));
+      if (includesPath.length === 1) return includesPath[0].term.id;
 
       return null;
     }
