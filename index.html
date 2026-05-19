@@ -1581,7 +1581,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         <div class="term-header">
           <h1>Gestão da revisão</h1>
           <div class="muted">
-            ${pendingTerms().length} ação(ões) pendente(s) e ${unseenComments().length} comentário(s) não visto(s).
+            ${pendingActionItems().length} ação(ões) pendente(s) e ${unseenComments().length} comentário(s) não visto(s).
           </div>
         </div>
 
@@ -1649,7 +1649,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
     function renderManagementActionsHtml() {
       if (managementActionFilter === "pendentes") {
-        const pendentes = getPendingTerms();
+        const pendentes = pendingActionItems();
 
         if (!pendentes.length) {
           return '<div class="empty">Não há ações pendentes.</div>';
@@ -1668,16 +1668,18 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
         return false;
       });
 
-       if (managementActionFilter === "aprovadas" && managementSthFilter !== "todas") {
+      if (managementActionFilter === "aprovadas" && managementSthFilter !== "todas") {
         actions = actions.filter(action => action.sthStatus === managementSthFilter);
       }
 
-      actions = actions.slice().sort((a, b) => String(b.decididoEm).localeCompare(String(a.decididoEm)));
+      actions = actions
+        .slice()
+        .sort((a, b) => String(b.decididoEm).localeCompare(String(a.decididoEm)));
 
       if (!actions.length) {
         return '<div class="empty">Nenhuma ação encontrada para este filtro.</div>';
-  }
-    
+      }
+
       return `
         <div class="pending-list">
           ${actions.map(renderActionHistoryItemHtml).join("")}
