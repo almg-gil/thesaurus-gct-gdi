@@ -2762,121 +2762,88 @@ function renderOriginalSummary(term) {
 
     function renderTermDatalist(datalistId, excludeIds = []) {
       const excluded = new Set(excludeIds.map(String));
-      const usedValues = new Set();
-      const options = [];
-
-      function addOption(value, label = "") {
-        const finalValue = String(value || "").trim();
-
-        if (!finalValue) return;
-
-        // Aqui NÃO pode usar normalizeSearchText como chave,
-        // senão "Administração Pública" e "administracao publica"
-        // viram a mesma chave e a opção sem acento é descartada.
-        const key = finalValue.toLowerCase();
-
-        if (usedValues.has(key)) return;
-
-        usedValues.add(key);
-
-        options.push(
-          `<option value="${escapeAttr(finalValue)}"${label ? ` label="${escapeAttr(label)}"` : ""}></option>`
-        );
-      }
-
-      state.terms
-        .filter(t => t.revisao !== REVIEW_EXCLUIR && !excluded.has(String(t.id)))
-        .slice()
-        .sort((a, b) => a.termo.localeCompare(b.termo, "pt-BR"))
-        .forEach(t => {
-          const termoOriginal = String(t.termo || "").trim();
-          const termoNormalizado = normalizeSearchText(termoOriginal);
-
-          // Opção oficial, com acento.
-          addOption(termoOriginal);
-
-          // Opção auxiliar, sem acento e sem caracteres especiais.
-          if (termoNormalizado && termoNormalizado !== termoOriginal.toLowerCase()) {
-            addOption(termoNormalizado, termoOriginal);
-          }
-        });
 
       return `
         <datalist id="${escapeAttr(datalistId)}">
-          ${options.join("")}
+          ${state.terms
+            .filter(t => t.revisao !== REVIEW_EXCLUIR && !excluded.has(String(t.id)))
+            .slice()
+            .sort((a, b) => a.termo.localeCompare(b.termo, "pt-BR"))
+            .map(t => `<option value="${escapeAttr(t.termo)}"></option>`)
+            .join("")}
         </datalist>
       `;
     }
 
-    function findTermIdByTypedValue(value) {
-      const raw = String(value || "").trim();
-      const typed = normalizeSearchText(raw);
+        function findTermIdByTypedValue(value) {
+          const raw = String(value || "").trim();
+          const typed = normalizeSearchText(raw);
 
-      if (!typed) return null;
+          if (!typed) return null;
 
-      const candidates = state.terms
-        .filter(t => t.revisao !== REVIEW_EXCLUIR)
-        .map(t => ({
-          term: t,
-          termoOriginal: String(t.termo || "").trim(),
-          termoNormalizado: normalizeSearchText(t.termo),
-          caminhoNormalizado: normalizeSearchText(termPath(t))
-        }));
+          const candidates = state.terms
+            .filter(t => t.revisao !== REVIEW_EXCLUIR)
+            .map(t => ({
+              term: t,
+              termoOriginal: String(t.termo || "").trim(),
+              termoNormalizado: normalizeSearchText(t.termo),
+              caminhoNormalizado: normalizeSearchText(termPath(t))
+            }));
 
-      // 1. Nome oficial exatamente igual, considerando maiúsculas/minúsculas.
-      const exactOriginal = candidates.find(item =>
-        item.termoOriginal.toLowerCase() === raw.toLowerCase()
-      );
+          // 1. Nome oficial exatamente igual, considerando maiúsculas/minúsculas.
+          const exactOriginal = candidates.find(item =>
+            item.termoOriginal.toLowerCase() === raw.toLowerCase()
+          );
 
-      if (exactOriginal) return exactOriginal.term.id;
+          if (exactOriginal) return exactOriginal.term.id;
 
-      // 2. Nome normalizado exatamente igual.
-      const exactNameMatches = candidates.filter(item =>
-        item.termoNormalizado === typed
-      );
+          // 2. Nome normalizado exatamente igual.
+          const exactNameMatches = candidates.filter(item =>
+            item.termoNormalizado === typed
+          );
 
-      if (exactNameMatches.length === 1) {
-        return exactNameMatches[0].term.id;
-      }
+          if (exactNameMatches.length === 1) {
+            return exactNameMatches[0].term.id;
+          }
 
-      // 3. Caminho normalizado exatamente igual.
-      const exactPathMatches = candidates.filter(item =>
-        item.caminhoNormalizado === typed
-      );
+          // 3. Caminho normalizado exatamente igual.
+          const exactPathMatches = candidates.filter(item =>
+            item.caminhoNormalizado === typed
+          );
 
-      if (exactPathMatches.length === 1) {
-        return exactPathMatches[0].term.id;
-      }
+          if (exactPathMatches.length === 1) {
+            return exactPathMatches[0].term.id;
+          }
 
-      // 4. Começa com o texto digitado.
-      const startsWithNameMatches = candidates.filter(item =>
-        item.termoNormalizado.startsWith(typed)
-      );
+          // 4. Começa com o texto digitado.
+          const startsWithNameMatches = candidates.filter(item =>
+            item.termoNormalizado.startsWith(typed)
+          );
 
-      if (startsWithNameMatches.length === 1) {
-        return startsWithNameMatches[0].term.id;
-      }
+          if (startsWithNameMatches.length === 1) {
+            return startsWithNameMatches[0].term.id;
+          }
 
-      // 5. Contém o texto digitado.
-      const includesNameMatches = candidates.filter(item =>
-        item.termoNormalizado.includes(typed)
-      );
+          // 5. Contém o texto digitado.
+          const includesNameMatches = candidates.filter(item =>
+            item.termoNormalizado.includes(typed)
+          );
 
-      if (includesNameMatches.length === 1) {
-        return includesNameMatches[0].term.id;
-      }
+          if (includesNameMatches.length === 1) {
+            return includesNameMatches[0].term.id;
+          }
 
-      // 6. Contém no caminho.
-      const includesPathMatches = candidates.filter(item =>
-        item.caminhoNormalizado.includes(typed)
-      );
+          // 6. Contém no caminho.
+          const includesPathMatches = candidates.filter(item =>
+            item.caminhoNormalizado.includes(typed)
+          );
 
-      if (includesPathMatches.length === 1) {
-        return includesPathMatches[0].term.id;
-      }
+          if (includesPathMatches.length === 1) {
+            return includesPathMatches[0].term.id;
+          }
 
-      return null;
-    }
+          return null;
+        }
 
     function addUniqueValue(list, value) {
       if (!Array.isArray(list)) list = [];
