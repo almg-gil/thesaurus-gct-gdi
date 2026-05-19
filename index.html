@@ -2762,21 +2762,42 @@ function renderOriginalSummary(term) {
 
     function renderTermDatalist(datalistId, excludeIds = []) {
       const excluded = new Set(excludeIds.map(String));
-
+      const usedValues = new Set();
       const options = [];
+
+      function addOption(value, label = "") {
+        const finalValue = String(value || "").trim();
+
+        if (!finalValue) return;
+
+        const key = normalizeSearchText(finalValue);
+
+        if (usedValues.has(key)) return;
+
+        usedValues.add(key);
+
+        options.push(
+          `<option value="${escapeAttr(finalValue)}"${label ? ` label="${escapeAttr(label)}"` : ""}></option>`
+        );
+      }
 
       state.terms
         .filter(t => t.revisao !== REVIEW_EXCLUIR && !excluded.has(String(t.id)))
         .slice()
         .sort((a, b) => a.termo.localeCompare(b.termo, "pt-BR"))
         .forEach(t => {
-          const termoOriginal = t.termo;
-          const termoNormalizado = normalizeSearchText(t.termo);
+          const termoOriginal = String(t.termo || "").trim();
+          const termoNormalizado = normalizeSearchText(termoOriginal);
+          const termoOriginalComparavel = termoOriginal.toLowerCase();
 
-          options.push(`<option value="${escapeAttr(termoOriginal)}"></option>`);
+          // Opção com o nome oficial, com acentos.
+          addOption(termoOriginal);
 
-          if (termoNormalizado && termoNormalizado !== normalizeSearchText(termoOriginal)) {
-            options.push(`<option value="${escapeAttr(termoNormalizado)}" label="${escapeAttr(termoOriginal)}"></option>`);
+          // Opção auxiliar sem acentos e sem caracteres especiais.
+          // Ex.: "Área de Preservação Permanente (APP)"
+          // entra também como "area de preservacao permanente app".
+          if (termoNormalizado && termoNormalizado !== termoOriginalComparavel) {
+            addOption(termoNormalizado, termoOriginal);
           }
         });
 
@@ -2788,7 +2809,8 @@ function renderOriginalSummary(term) {
     }
 
     function findTermIdByTypedValue(value) {
-      const typed = normalizeSearchText(value);
+      const raw = String(value || "").trim();
+      const typed = normalizeSearchText(raw);
 
       if (!typed) return null;
 
@@ -2796,24 +2818,62 @@ function renderOriginalSummary(term) {
         .filter(t => t.revisao !== REVIEW_EXCLUIR)
         .map(t => ({
           term: t,
+          termoOriginal: String(t.termo || "").trim(),
           termoNormalizado: normalizeSearchText(t.termo),
           caminhoNormalizado: normalizeSearchText(termPath(t))
         }));
 
-      const exactName = candidates.find(item => item.termoNormalizado === typed);
-      if (exactName) return exactName.term.id;
+      // 1. Nome oficial exatamente igual, considerando maiúsculas/minúsculas.
+      const exactOriginal = candidates.find(item =>
+        item.termoOriginal.toLowerCase() === raw.toLowerCase()
+      );
 
-      const exactPath = candidates.find(item => item.caminhoNormalizado === typed);
-      if (exactPath) return exactPath.term.id;
+      if (exactOriginal) return exactOriginal.term.id;
 
-      const startsWithName = candidates.filter(item => item.termoNormalizado.startsWith(typed));
-      if (startsWithName.length === 1) return startsWithName[0].term.id;
+      // 2. Nome normalizado exatamente igual.
+      const exactNameMatches = candidates.filter(item =>
+        item.termoNormalizado === typed
+      );
 
-      const includesName = candidates.filter(item => item.termoNormalizado.includes(typed));
-      if (includesName.length === 1) return includesName[0].term.id;
+      if (exactNameMatches.length === 1) {
+        return exactNameMatches[0].term.id;
+      }
 
-      const includesPath = candidates.filter(item => item.caminhoNormalizado.includes(typed));
-      if (includesPath.length === 1) return includesPath[0].term.id;
+      // 3. Caminho normalizado exatamente igual.
+      const exactPathMatches = candidates.filter(item =>
+        item.caminhoNormalizado === typed
+      );
+
+      if (exactPathMatches.length === 1) {
+        return exactPathMatches[0].term.id;
+      }
+
+      // 4. Começa com o texto digitado.
+      const startsWithNameMatches = candidates.filter(item =>
+        item.termoNormalizado.startsWith(typed)
+      );
+
+      if (startsWithNameMatches.length === 1) {
+        return startsWithNameMatches[0].term.id;
+      }
+
+      // 5. Contém o texto digitado.
+      const includesNameMatches = candidates.filter(item =>
+        item.termoNormalizado.includes(typed)
+      );
+
+      if (includesNameMatches.length === 1) {
+        return includesNameMatches[0].term.id;
+      }
+
+      // 6. Contém no caminho.
+      const includesPathMatches = candidates.filter(item =>
+        item.caminhoNormalizado.includes(typed)
+      );
+
+      if (includesPathMatches.length === 1) {
+        return includesPathMatches[0].term.id;
+      }
 
       return null;
     }
