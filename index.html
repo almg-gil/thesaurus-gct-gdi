@@ -1304,7 +1304,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       searchInput.value = "";
       collapseOnlyClasses();
       await saveState();
-      render();
+      renderTree();
     }
 
     function termPath(term) {
@@ -2130,9 +2130,9 @@ function renderOriginalSummary(term) {
           state.expanded = state.expanded.filter(id => id !== term.id);
         } else {
           state.expanded.push(term.id);
-      }
+        }
 
-      render();
+        renderTree();
       };
 
       const label = document.createElement("button");
