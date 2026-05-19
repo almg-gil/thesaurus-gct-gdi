@@ -4332,9 +4332,7 @@ async function rejectPendingChange(changeId) {
 
         const selectedIdAtualExiste = state.selectedId && idsValidos.has(state.selectedId);
 
-        const comments = Array.isArray(state.comments)
-          ? state.comments.filter(comment => idsValidos.has(comment.termId))
-          : [];
+        const comments = [];
 
         state = normalizeState({
           selectedId: selectedIdAtualExiste ? state.selectedId : (termos[0]?.id || null),
