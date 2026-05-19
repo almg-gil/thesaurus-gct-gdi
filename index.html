@@ -1595,7 +1595,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           ${
             Array.isArray(action.resumo) && action.resumo.length
-              ? `<ul class="pending-summary">${action.resumo.map(line => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`
+              ? `<ul class="pending-summary">${action.resumo.map(line => `<li>${escapeHtml(line).split("\\n").join("<br>")}</li>`).join("")}</ul>`
               : ""
           }
 
@@ -2257,39 +2257,95 @@ function renderOriginalSummary(term) {
 
           <div class="relation-box">
             <strong>Sinônimos autorizados / TR</strong>
-            ${relatedTerms.length ? `<ul class="small-list">${relatedTerms.map(r => `<li>${escapeHtml(r.termo)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
-            <div class="toolbar">
-              <select id="addRelatedSelect">${relatedOptions(term.id)}</select>
-              <button id="addRelatedBtn">Adicionar relação</button>
+
+            ${
+              relatedTerms.length
+                ? `<ul class="small-list">
+                    ${relatedTerms.map(r => `
+                      <li>
+                        <strong>${escapeHtml(r.termo)}</strong>
+                        ${r.revisao !== REVIEW_ORIGINAL ? `<span class="review-badge ${escapeAttr(r.revisao)}">${escapeHtml(reviewLabel(r.revisao))}</span>` : ""}
+
+                        <div class="toolbar">
+                          <button data-related-action="view" data-related-id="${escapeAttr(r.id)}">Ver termo</button>
+                          <button class="danger" data-related-action="remove" data-related-id="${escapeAttr(r.id)}">Remover relação</button>
+
+                          <select data-related-replace-select="${escapeAttr(r.id)}">
+                            ${relatedOptionsForReplace(term.id, r.id)}
+                          </select>
+                          <button data-related-action="replace" data-related-id="${escapeAttr(r.id)}">Substituir TR</button>
+                      </div>
+                  </li>
+              `).join("")}
+            </ul>`
+          : '<div class="muted">—</div>'
+      }
+
+      <div class="toolbar">
+        <select id="addRelatedSelect">${relatedOptions(term.id)}</select>
+        <button id="addRelatedBtn">Adicionar TR</button>
+        <button id="createRelatedTermBtn">Criar novo termo autorizado relacionado</button>
+      </div>
+    </div>
+
+    <div class="relation-box">
+      <strong>Sinônimos não autorizados / UP</strong>
+
+      ${
+        naoAutorizados.length
+          ? `<ul class="small-list">
+              ${naoAutorizados.map((up, index) => `
+                <li>
+                  <strong>${escapeHtml(up)}</strong>
+
+                  <div class="toolbar">
+                    <button data-up-action="edit" data-up-index="${index}">Editar UP</button>
+                    <button class="danger" data-up-action="remove" data-up-index="${index}">Sugerir retirada do UP</button>
+
+                    <select data-up-move-select="${index}">
+                      ${termOptionsForMoveUp(term.id)}
+                    </select>
+                    <button data-up-action="move" data-up-index="${index}">Mover UP</button>
+                  </div>
+                </li>
+              `).join("")}
+            </ul>`
+          : '<div class="muted">—</div>'
+      }
+
+      <div class="toolbar">
+        <input id="newUnauthorizedInput" type="text" placeholder="Novo sinônimo não autorizado / UP" />
+        <button id="addUnauthorizedBtn">Adicionar UP</button>
+      </div>
+    </div>
+              </div>
+
+              <div class="relation-box">
+                <strong>Sinônimos não autorizados / UP</strong>
+                ${naoAutorizados.length ? `<ul class="small-list">${naoAutorizados.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
+              </div>
             </div>
-          </div>
 
-          <div class="relation-box">
-            <strong>Sinônimos não autorizados / UP</strong>
-            ${naoAutorizados.length ? `<ul class="small-list">${naoAutorizados.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
-          </div>
-        </div>
+            <div id="comentarios" class="panel">
+                  <div class="field">
+                    <label>Novo comentário</label>
+                    <textarea id="newCommentText" placeholder="Escreva uma observação sobre este termo..."></textarea>
+                  </div>
+                  <button id="addCommentBtn" class="primary">Adicionar comentário</button>
+                  <hr>
+                  <div id="commentsList">
+                    ${comments.length ? comments.map(renderCommentHtml).join("") : '<div class="empty">Nenhum comentário para este termo.</div>'}
+                  </div>
+                </div>
 
-        <div id="comentarios" class="panel">
-              <div class="field">
-                <label>Novo comentário</label>
-                <textarea id="newCommentText" placeholder="Escreva uma observação sobre este termo..."></textarea>
-              </div>
-              <button id="addCommentBtn" class="primary">Adicionar comentário</button>
-              <hr>
-              <div id="commentsList">
-                ${comments.length ? comments.map(renderCommentHtml).join("") : '<div class="empty">Nenhum comentário para este termo.</div>'}
-              </div>
-            </div>
-
-            ${userCanAccessManagement() ? `
-              <div id="pendencias" class="panel">
-                <div id="termPendingList"></div>
-              </div>
-            ` : ""}
+                ${userCanAccessManagement() ? `
+                  <div id="pendencias" class="panel">
+                    <div id="termPendingList"></div>
+                  </div>
+                ` : ""}
 
       
-      `;
+          `;
       
       const termPendingList = document.getElementById("termPendingList");
       if (termPendingList) {
@@ -2372,6 +2428,170 @@ function renderOriginalSummary(term) {
         .forEach(t => options.push(`<option value="${t.id}">${escapeHtml(termPath(t))}</option>`));
 
       return options.join("");
+    }
+
+    function relatedOptionsForReplace(currentId, oldRelatedId) {
+      const current = getTerm(currentId);
+      const selected = new Set(current?.relacionados || []);
+      const options = ['<option value="">Substituir por...</option>'];
+
+      state.terms
+        .filter(t =>
+          t.id !== currentId &&
+          t.id !== oldRelatedId &&
+          t.revisao !== REVIEW_EXCLUIR &&
+          !selected.has(t.id)
+        )
+        .slice()
+        .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
+        .forEach(t => {
+          options.push(`<option value="${escapeAttr(t.id)}">${escapeHtml(termPath(t))}</option>`);
+        });
+
+      return options.join("");
+    }
+
+    function termOptionsForMoveUp(currentId) {
+      const options = ['<option value="">Mover para...</option>'];
+
+      state.terms
+        .filter(t => t.id !== currentId && t.revisao !== REVIEW_EXCLUIR)
+        .slice()
+        .sort((a, b) => termPath(a).localeCompare(termPath(b), "pt-BR"))
+        .forEach(t => {
+          options.push(`<option value="${escapeAttr(t.id)}">${escapeHtml(termPath(t))}</option>`);
+        });
+
+      return options.join("");
+    }
+
+    function addUniqueValue(list, value) {
+      if (!Array.isArray(list)) list = [];
+      if (!list.includes(value)) list.push(value);
+      return list;
+    }
+
+    function removeValue(list, value) {
+      return (Array.isArray(list) ? list : []).filter(item => item !== value);
+    }
+
+    function removeValueAtIndex(list, index) {
+      return (Array.isArray(list) ? list : []).filter((_, i) => i !== index);
+    }
+
+    function addAuthorizedRelation(term, relatedId) {
+      const other = getTerm(relatedId);
+      if (!term || !other || term.id === other.id) return false;
+
+      ensureOriginal(term);
+      ensureOriginal(other);
+
+      term.relacionados = addUniqueValue(term.relacionados, other.id);
+      other.relacionados = addUniqueValue(other.relacionados, term.id);
+
+      markModified(term);
+      markModified(other);
+
+      return true;
+    }
+
+    function removeAuthorizedRelation(term, relatedId) {
+      const other = getTerm(relatedId);
+      if (!term || !other) return false;
+
+      ensureOriginal(term);
+      ensureOriginal(other);
+
+      term.relacionados = removeValue(term.relacionados, relatedId);
+      other.relacionados = removeValue(other.relacionados, term.id);
+
+      markModified(term);
+      markModified(other);
+
+      return true;
+    }
+
+    function addUnauthorizedRelation(term, value) {
+      if (!term || !value) return false;
+
+      ensureOriginal(term);
+
+      term.relacionadosNaoAutorizados = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      if (!term.relacionadosNaoAutorizados.includes(value)) {
+        term.relacionadosNaoAutorizados.push(value);
+      }
+
+      markModified(term);
+      return true;
+    }
+
+    function editUnauthorizedRelation(term, index, newValue) {
+      if (!term || !newValue) return false;
+
+      const list = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      if (!list[index]) return false;
+
+      ensureOriginal(term);
+
+      list[index] = newValue;
+      term.relacionadosNaoAutorizados = list;
+
+      markModified(term);
+      return true;
+    }
+
+    function removeUnauthorizedRelation(term, index) {
+      if (!term) return false;
+
+      const list = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      if (!list[index]) return false;
+
+      ensureOriginal(term);
+
+      term.relacionadosNaoAutorizados = removeValueAtIndex(list, index);
+
+      markModified(term);
+      return true;
+    }
+
+    function moveUnauthorizedRelation(term, index, targetTermId) {
+      const target = getTerm(targetTermId);
+
+      if (!term || !target || term.id === target.id) return false;
+
+      const list = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      const value = list[index];
+      if (!value) return false;
+
+      ensureOriginal(term);
+      ensureOriginal(target);
+
+      term.relacionadosNaoAutorizados = removeValueAtIndex(list, index);
+
+      target.relacionadosNaoAutorizados = Array.isArray(target.relacionadosNaoAutorizados)
+        ? target.relacionadosNaoAutorizados
+        : [];
+
+      if (!target.relacionadosNaoAutorizados.includes(value)) {
+        target.relacionadosNaoAutorizados.push(value);
+      }
+
+      markModified(term);
+      markModified(target);
+
+      return true;
     }
 
     function isDescendantOf(candidateId, possibleAncestorId) {
@@ -2519,21 +2739,167 @@ function renderOriginalSummary(term) {
           const relatedId = document.getElementById("addRelatedSelect").value;
           if (!relatedId) return;
 
-          ensureOriginal(term);
-          term.relacionados = term.relacionados || [];
-          if (!term.relacionados.includes(relatedId)) term.relacionados.push(relatedId);
+          addAuthorizedRelation(term, relatedId);
 
-          const other = getTerm(relatedId);
-          if (other) {
-            other.relacionados = other.relacionados || [];
-            if (!other.relacionados.includes(term.id)) other.relacionados.push(term.id);
-          }
-
-          markModified(term);
           await saveState();
           render();
         };
       }
+
+      const createRelatedTermBtn = document.getElementById("createRelatedTermBtn");
+      if (createRelatedTermBtn) {
+        createRelatedTermBtn.onclick = async () => {
+          const value = prompt("Informe o nome do novo termo autorizado relacionado:");
+
+          const termoNovo = String(value || "").trim();
+          if (!termoNovo) return;
+
+          const id = uid("term");
+
+          const novoTermo = {
+            id,
+            parentId: term.parentId || null,
+            termo: termoNovo,
+            termoAnterior: "",
+            conceito: "",
+            definicao: "",
+            notaEscopo: "",
+            notaUso: "",
+            relacionados: [term.id],
+            relacionadosNaoAutorizados: [],
+            revisao: REVIEW_NOVO,
+            original: null,
+            revisaoPor: currentUser.value.trim() || "Usuário",
+            revisaoEm: nowLabel()
+          };
+
+          state.terms.push(novoTermo);
+
+          ensureOriginal(term);
+          term.relacionados = addUniqueValue(term.relacionados, id);
+          markModified(term);
+
+          if (novoTermo.parentId && !state.expanded.includes(novoTermo.parentId)) {
+            state.expanded.push(novoTermo.parentId);
+          }
+
+          state.selectedId = id;
+
+          await saveState();
+          render();
+        };
+      }
+
+      termArea.querySelectorAll("[data-related-action]").forEach(btn => {
+        btn.onclick = async () => {
+          const action = btn.dataset.relatedAction;
+          const relatedId = btn.dataset.relatedId;
+
+          if (action === "view") {
+            state.selectedId = relatedId;
+            reviewMode = false;
+            render();
+            return;
+          }
+
+          if (action === "remove") {
+            const related = getTerm(relatedId);
+            const label = related ? displayTermName(related) : "este termo";
+
+            if (!confirm(`Remover a relação TR com "${label}"?`)) return;
+
+            removeAuthorizedRelation(term, relatedId);
+
+            await saveState();
+            render();
+            return;
+          }
+
+          if (action === "replace") {
+            const select = termArea.querySelector(`[data-related-replace-select="${CSS.escape(relatedId)}"]`);
+            const newRelatedId = select ? select.value : "";
+
+            if (!newRelatedId) {
+              alert("Selecione o novo TR antes de substituir.");
+              return;
+            }
+
+            removeAuthorizedRelation(term, relatedId);
+            addAuthorizedRelation(term, newRelatedId);
+
+            await saveState();
+            render();
+          }
+        };
+      });
+
+      const addUnauthorizedBtn = document.getElementById("addUnauthorizedBtn");
+      if (addUnauthorizedBtn) {
+        addUnauthorizedBtn.onclick = async () => {
+          const input = document.getElementById("newUnauthorizedInput");
+          const value = input ? input.value.trim() : "";
+
+          if (!value) {
+            alert("Informe o sinônimo não autorizado / UP.");
+            return;
+          }
+
+          addUnauthorizedRelation(term, value);
+  
+          await saveState();
+          render();
+        };
+      }
+
+      termArea.querySelectorAll("[data-up-action]").forEach(btn => {
+        btn.onclick = async () => {
+          const action = btn.dataset.upAction;
+          const index = Number(btn.dataset.upIndex);
+
+          if (Number.isNaN(index)) return;
+
+          if (action === "edit") {
+            const currentValue = term.relacionadosNaoAutorizados?.[index] || "";
+            const value = prompt("Editar sinônimo não autorizado / UP:", currentValue);
+
+            const newValue = String(value || "").trim();
+            if (!newValue) return;
+
+            editUnauthorizedRelation(term, index, newValue);
+
+            await saveState();
+            render();
+            return;
+          }
+
+          if (action === "remove") {
+            const currentValue = term.relacionadosNaoAutorizados?.[index] || "";
+
+            if (!confirm(`Sugerir retirada do UP "${currentValue}"?`)) return;
+
+            removeUnauthorizedRelation(term, index);
+
+            await saveState();
+            render();
+            return;
+          }
+
+          if (action === "move") {
+            const select = termArea.querySelector(`[data-up-move-select="${index}"]`);
+            const targetTermId = select ? select.value : "";
+
+            if (!targetTermId) {
+              alert("Selecione o termo de destino antes de mover.");
+              return;
+            }
+
+            moveUnauthorizedRelation(term, index, targetTermId);
+
+            await saveState();
+            render();
+          }
+        };
+      });
 
       const addCommentBtn = document.getElementById("addCommentBtn");
       if (addCommentBtn) {
