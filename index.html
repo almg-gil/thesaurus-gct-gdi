@@ -1763,10 +1763,13 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           if (action === "mark-seen") {
             await marcarComentarioComoVisto(btn.dataset.commentId);
+            return;
           }
+
           if (action === "reply") {
             await responderComentario(btn.dataset.commentId);
-}
+            return;
+          }
         };
       });
     }
@@ -2269,58 +2272,62 @@ function renderOriginalSummary(term) {
                         <div class="toolbar">
                           <button data-related-action="view" data-related-id="${escapeAttr(r.id)}">Ver termo</button>
                           <button class="danger" data-related-action="remove" data-related-id="${escapeAttr(r.id)}">Remover relação</button>
-
-                          <select data-related-replace-select="${escapeAttr(r.id)}">
-                            ${relatedOptionsForReplace(term.id, r.id)}
-                          </select>
                           <button data-related-action="replace" data-related-id="${escapeAttr(r.id)}">Substituir TR</button>
-                      </div>
-                  </li>
-              `).join("")}
-            </ul>`
-          : '<div class="muted">—</div>'
-      }
+                        </div>
+                      </li>
+                    `).join("")}
+                  </ul>`
+                : '<div class="muted">—</div>'
+            }
 
-      <div class="toolbar">
-        <select id="addRelatedSelect">${relatedOptions(term.id)}</select>
-        <button id="addRelatedBtn">Adicionar TR</button>
-        <button id="createRelatedTermBtn">Criar novo termo autorizado relacionado</button>
-      </div>
-    </div>
+            <div class="toolbar">
+              <select id="addRelatedSelect">${relatedOptions(term.id)}</select>
+              <button id="addRelatedBtn">Adicionar TR</button>
+              <button id="createRelatedTermBtn">Criar novo termo autorizado relacionado</button>
+            </div>
 
-    <div class="relation-box">
-      <strong>Sinônimos não autorizados / UP</strong>
+            <div class="toolbar">
+              <select id="replaceRelatedTargetSelect">${relatedOptions(term.id)}</select>
+              <span class="muted">Para substituir um TR, selecione aqui o novo termo e depois clique em “Substituir TR”.</span>
+            </div>
+          </div>
 
-      ${
-        naoAutorizados.length
-          ? `<ul class="small-list">
-              ${naoAutorizados.map((up, index) => `
-                <li>
-                  <strong>${escapeHtml(up)}</strong>
+          <div class="relation-box">
+            <strong>Sinônimos não autorizados / UP</strong>
 
-                  <div class="toolbar">
-                    <button data-up-action="edit" data-up-index="${index}">Editar UP</button>
-                    <button class="danger" data-up-action="remove" data-up-index="${index}">Sugerir retirada do UP</button>
+            ${
+              naoAutorizados.length
+                ? `<ul class="small-list">
+                    ${naoAutorizados.map((up, index) => `
+                      <li>
+                        <strong>${escapeHtml(up)}</strong>
 
-                    <select data-up-move-select="${index}">
-                      ${termOptionsForMoveUp(term.id)}
-                    </select>
-                    <button data-up-action="move" data-up-index="${index}">Mover UP</button>
-                  </div>
-                </li>
-              `).join("")}
-            </ul>`
-          : '<div class="muted">—</div>'
-      }
+                        <div class="toolbar">
+                          <button data-up-action="edit" data-up-index="${index}">Editar UP</button>
+                          <button class="danger" data-up-action="remove" data-up-index="${index}">Sugerir retirada do UP</button>
+                          <button data-up-action="move" data-up-index="${index}">Mover UP</button>
+                        </div>
+                      </li>
+                    `).join("")}
+                  </ul>`
+                : '<div class="muted">—</div>'
+            }
 
             <div class="toolbar">
               <input id="newUnauthorizedInput" type="text" placeholder="Novo sinônimo não autorizado / UP" />
               <button id="addUnauthorizedBtn">Adicionar UP</button>
             </div>
-          </div>
-      </div>
 
-      <div id="comentarios" class="panel">
+            <div class="toolbar">
+              <select id="moveUnauthorizedTargetSelect">${termOptionsForMoveUp(term.id)}</select>
+              <span class="muted">Para mover um UP, selecione aqui o termo de destino e depois clique em “Mover UP”.</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="comentarios" class="panel">
+
+          
                   <div class="field">
                     <label>Novo comentário</label>
                     <textarea id="newCommentText" placeholder="Escreva uma observação sobre este termo..."></textarea>
@@ -2810,11 +2817,11 @@ function renderOriginalSummary(term) {
           }
 
           if (action === "replace") {
-            const select = termArea.querySelector(`[data-related-replace-select="${CSS.escape(relatedId)}"]`);
+            const select = document.getElementById("replaceRelatedTargetSelect");
             const newRelatedId = select ? select.value : "";
 
             if (!newRelatedId) {
-              alert("Selecione o novo TR antes de substituir.");
+              alert("Selecione o novo TR no campo abaixo da lista antes de substituir.");
               return;
             }
 
@@ -2879,11 +2886,11 @@ function renderOriginalSummary(term) {
           }
 
           if (action === "move") {
-            const select = termArea.querySelector(`[data-up-move-select="${index}"]`);
+            const select = document.getElementById("moveUnauthorizedTargetSelect");
             const targetTermId = select ? select.value : "";
 
             if (!targetTermId) {
-              alert("Selecione o termo de destino antes de mover.");
+              alert("Selecione o termo de destino no campo abaixo da lista antes de mover.");
               return;
             }
 
