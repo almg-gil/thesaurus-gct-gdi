@@ -3298,27 +3298,50 @@ function renderOriginalSummary(term) {
       `;
     }
 
-    setupTermAutocomplete("addRelatedInput", "addRelatedSuggest", [term.id]);
+    function wireTermArea(term) {
+      termArea.querySelectorAll(".tab").forEach(tab => {
+        tab.addEventListener("click", () => {
+          const targetId = tab.dataset.tab;
 
-(term.relacionados || []).forEach(relatedId => {
-  setupTermAutocomplete(
-    `replaceInput-${relatedId}`,
-    `replaceSuggest-${relatedId}`,
-    [term.id, relatedId]
-  );
-});
+          termArea.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+          termArea.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
 
-(term.relacionadosNaoAutorizados || []).forEach(nome => {
-  const slug = slugIcmg(nome);
+          tab.classList.add("active");
 
-  setupTermAutocomplete(
-    `moveUpInput-${slug}`,
-    `moveUpSuggest-${slug}`,
-    [term.id]
-  );
-});
+          const targetPanel = termArea.querySelector(`#${targetId}`);
+          if (targetPanel) {
+            targetPanel.classList.add("active");
+          }
+        });
+      });
+
+      setupTermAutocomplete("addRelatedInput", "addRelatedSuggest", [
+        term.id,
+        ...(term.relacionados || [])
+      ]);
+
+      (term.relacionados || []).forEach(relatedId => {
+        setupTermAutocomplete(
+          `replaceInput-${relatedId}`,
+          `replaceSuggest-${relatedId}`,
+          [term.id, relatedId]
+        );
+      });
+
+      (term.relacionadosNaoAutorizados || []).forEach(nome => {
+        const slug = slugIcmg(nome);
+
+        setupTermAutocomplete(
+          `moveUpInput-${slug}`,
+          `moveUpSuggest-${slug}`,
+          [term.id]
+        );
+      });
 
       const saveBtn = document.getElementById("saveTermBtn");
+
+
+    
       if (saveBtn) {
         saveBtn.onclick = async () => {
           const oldParentId = term.parentId;
@@ -3419,7 +3442,7 @@ function renderOriginalSummary(term) {
 
                 if (action === "confirm-replace") {
                   const input = document.getElementById(`replaceInput-${targetId}`);
-                  const newTargetId = input ? findTermIdByTypedValue(input.value) : null;
+                  const newTargetId = getTermIdFromSearchInput(input);
 
                   if (!newTargetId) {
                     alert("Digite e selecione um termo válido para substituir o TR.");
@@ -3445,7 +3468,7 @@ function renderOriginalSummary(term) {
             if (addRelatedBtn) {
               addRelatedBtn.onclick = async () => {
                 const input = document.getElementById("addRelatedInput");
-                const relatedId = input ? findTermIdByTypedValue(input.value) : null;
+                const relatedId = getTermIdFromSearchInput(input);
 
                 if (!relatedId) {
                   alert("Digite e selecione um termo válido para adicionar como TR.");
@@ -3497,7 +3520,7 @@ function renderOriginalSummary(term) {
 
                 if (action === "confirm-move") {
                   const input = document.getElementById(`moveUpInput-${slugIcmg(upValue)}`);
-                  const targetTermId = input ? findTermIdByTypedValue(input.value) : null;
+                  const targetTermId = getTermIdFromSearchInput(input);
 
                   if (!targetTermId) {
                     alert("Digite e selecione um termo válido para receber este UP.");
