@@ -2313,20 +2313,14 @@ function renderOriginalSummary(term) {
           : '<div class="muted">—</div>'
       }
 
-      <div class="toolbar">
-        <input id="newUnauthorizedInput" type="text" placeholder="Novo sinônimo não autorizado / UP" />
-        <button id="addUnauthorizedBtn">Adicionar UP</button>
-      </div>
-    </div>
-              </div>
-
-              <div class="relation-box">
-                <strong>Sinônimos não autorizados / UP</strong>
-                ${naoAutorizados.length ? `<ul class="small-list">${naoAutorizados.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
-              </div>
+            <div class="toolbar">
+              <input id="newUnauthorizedInput" type="text" placeholder="Novo sinônimo não autorizado / UP" />
+              <button id="addUnauthorizedBtn">Adicionar UP</button>
             </div>
+          </div>
+      </div>
 
-            <div id="comentarios" class="panel">
+      <div id="comentarios" class="panel">
                   <div class="field">
                     <label>Novo comentário</label>
                     <textarea id="newCommentText" placeholder="Escreva uma observação sobre este termo..."></textarea>
