@@ -693,6 +693,16 @@
       line-height: 1.5;
     }
 
+    .review-summary li,
+      .pending-summary li {
+        margin-bottom: 12px;
+      }
+
+      .review-summary li:last-child,
+      .pending-summary li:last-child {
+        margin-bottom: 0;
+      }
+
     .export-box {
       margin-top: 16px;
       border-top: 1px solid var(--border);
@@ -1928,22 +1938,83 @@ function normalizeDiffValue(value) {
 }
 
 function makeFieldDiff(label, oldValue, newValue) {
-  const before = normalizeDiffValue(oldValue);
-  const after = normalizeDiffValue(newValue);
+  const atual = normalizeDiffValue(oldValue);
+  const sugestao = normalizeDiffValue(newValue);
 
-  if (before === after) return null;
+  if (atual === sugestao) return null;
 
-  return `${label} alterada:\nAntes: ${before || "—"}\nDepois: ${after || "—"}`;
+  return `${label} alterada:\nAtual: ${atual || "—"}\nSugestão: ${sugestao || "—"}`;
 }
 
 function makeSimpleDiff(label, oldValue, newValue) {
-  const before = normalizeDiffValue(oldValue);
-  const after = normalizeDiffValue(newValue);
+  const atual = normalizeDiffValue(oldValue);
+  const sugestao = normalizeDiffValue(newValue);
 
-  if (before === after) return null;
+  if (atual === sugestao) return null;
 
-  return `${label}: ${before || "—"} → ${after || "—"}`;
+  return `${label} alterado:\nAtual: ${atual || "—"}\nSugestão: ${sugestao || "—"}`;
 }
+
+function listAddedItems(originalList, currentList) {
+  const originalSet = new Set((originalList || []).map(String));
+  return (currentList || []).map(String).filter(item => !originalSet.has(item));
+}
+
+function listRemovedItems(originalList, currentList) {
+  const currentSet = new Set((currentList || []).map(String));
+  return (originalList || []).map(String).filter(item => !currentSet.has(item));
+}
+
+function formatTermIdList(ids) {
+  return (ids || []).map(getTermNameForSummary).join("; ") || "—";
+}
+
+function formatTextList(values) {
+  return (values || []).join("; ") || "—";
+}
+
+function relationshipChangeLines(options) {
+  const {
+    originalList,
+    currentList,
+    singularLabel,
+    pluralLabel,
+    formatter
+  } = options;
+
+  const original = Array.isArray(originalList) ? originalList.map(String) : [];
+  const current = Array.isArray(currentList) ? currentList.map(String) : [];
+
+  if (JSON.stringify(original) === JSON.stringify(current)) {
+    return [];
+  }
+
+  const added = listAddedItems(original, current);
+  const removed = listRemovedItems(original, current);
+
+  const lines = [];
+
+  if (added.length && !removed.length) {
+    for (const item of added) {
+      lines.push(`${singularLabel} adicionado: ${formatter([item])}`);
+    }
+    return lines;
+  }
+
+  if (removed.length && !added.length) {
+    for (const item of removed) {
+      lines.push(`${singularLabel} sugerido para retirada: ${formatter([item])}`);
+    }
+    return lines;
+  }
+
+  lines.push(
+    `${pluralLabel} alterados:\nAtual: ${formatter(original)}\nSugestão: ${formatter(current)}`
+  );
+
+  return lines;
+}
+    
 function renderOriginalSummary(term) {
   const lines = pendingSummaryLines(term);
 
@@ -1952,77 +2023,80 @@ function renderOriginalSummary(term) {
   }
 
   return `
-    <ul class="small-list">
+    <ul class="small-list review-summary">
       ${lines.map(line => `<li>${escapeHtml(line).split("\\n").join("<br>")}</li>`).join("")}
     </ul>
   `;
 }
+      function pendingSummaryLines(term) {
+        if (term.revisao === REVIEW_NOVO) {
+          return [
+            `Novo termo em: ${getTermNameForSummary(term.parentId)}`,
+            `Termo criado: ${term.termo || "—"}`,
+            term.definicao ? `Definição: ${term.definicao}` : "",
+            term.notaEscopo ? `Nota Explicativa: ${term.notaEscopo}` : "",
+            term.notaUso ? `Nota Histórica: ${term.notaUso}` : ""
+          ].filter(Boolean);
+        }
 
+        if (term.revisao === REVIEW_EXCLUIR) {
+          return [
+            "Exclusão sugerida para este termo.",
+            `Termo: ${term.termo || "—"}`,
+            `Caminho: ${termPath(term) || "—"}`
+          ];
+        }
 
-    function pendingSummaryLines(term) {
-      if (term.revisao === REVIEW_NOVO) {
-        return [
-          `Novo termo em: ${getTermNameForSummary(term.parentId)}`,
-          `Termo criado: ${term.termo || "—"}`,
-          term.definicao ? `Definição: ${term.definicao}` : "",
-          term.notaEscopo ? `Nota Explicativa: ${term.notaEscopo}` : "",
-          term.notaUso ? `Nota Histórica: ${term.notaUso}` : ""
-        ].filter(Boolean);
-      }
+        const original = term.original;
 
-      if (term.revisao === REVIEW_EXCLUIR) {
-        return [
-          "Exclusão sugerida para este termo.",
-          `Termo: ${term.termo || "—"}`,
-          `Caminho: ${termPath(term) || "—"}`
-        ];
-      }
+        if (!original) {
+          return ["Alteração registrada sem cópia anterior disponível."];
+        }
 
-      const original = term.original;
+        const changes = [];
 
-      if (!original) {
-        return ["Alteração registrada sem cópia anterior disponível."];
-      }
+        const nomeDiff = makeSimpleDiff("Nome", original.termo, term.termo);
+        if (nomeDiff) changes.push(nomeDiff);
 
-      const changes = [];
+        if ((original.parentId || null) !== (term.parentId || null)) {
+          changes.push(
+            `Termo geral alterado:\nAtual: ${getTermNameForSummary(original.parentId)}\nSugestão: ${getTermNameForSummary(term.parentId)}`
+          );
+        }
 
-      const nomeDiff = makeSimpleDiff("Nome", original.termo, term.termo);
-      if (nomeDiff) changes.push(nomeDiff);
+        const definicaoDiff = makeFieldDiff("Definição", original.definicao, term.definicao);
+        if (definicaoDiff) changes.push(definicaoDiff);
 
-      if ((original.parentId || null) !== (term.parentId || null)) {
+        const notaExplicativaDiff = makeFieldDiff("Nota Explicativa", original.notaEscopo, term.notaEscopo);
+        if (notaExplicativaDiff) changes.push(notaExplicativaDiff);
+
+        const notaHistoricaDiff = makeFieldDiff("Nota Histórica", original.notaUso, term.notaUso);
+        if (notaHistoricaDiff) changes.push(notaHistoricaDiff);
+
         changes.push(
-          `Termo geral alterado:\nAntes: ${getTermNameForSummary(original.parentId)}\nDepois: ${getTermNameForSummary(term.parentId)}`
+          ...relationshipChangeLines({
+            originalList: original.relacionados || [],
+            currentList: term.relacionados || [],
+            singularLabel: "Sinônimo autorizado (TR)",
+            pluralLabel: "Sinônimos autorizados (TR)",
+            formatter: formatTermIdList
+          })
+          );
+
+        changes.push(
+          ...relationshipChangeLines({
+            originalList: original.relacionadosNaoAutorizados || [],
+            currentList: term.relacionadosNaoAutorizados || [],
+            singularLabel: "Termo não autorizado (UP)",
+            pluralLabel: "Termos não autorizados (UP)",
+            formatter: formatTextList
+          })
         );
+
+        return changes.length ? changes : ["Alteração registrada."];
       }
 
-      const definicaoDiff = makeFieldDiff("Definição", original.definicao, term.definicao);
-      if (definicaoDiff) changes.push(definicaoDiff);
-
-      const notaExplicativaDiff = makeFieldDiff("Nota Explicativa", original.notaEscopo, term.notaEscopo);
-      if (notaExplicativaDiff) changes.push(notaExplicativaDiff);
-
-      const notaHistoricaDiff = makeFieldDiff("Nota Histórica", original.notaUso, term.notaUso);
-      if (notaHistoricaDiff) changes.push(notaHistoricaDiff);
-
-      if (JSON.stringify(original.relacionados || []) !== JSON.stringify(term.relacionados || [])) {
-        const antes = (original.relacionados || []).map(getTermNameForSummary).join("; ") || "—";
-        const depois = (term.relacionados || []).map(getTermNameForSummary).join("; ") || "—";
-
-        changes.push(`Sinônimos autorizados / TR alterados:\nAntes: ${antes}\nDepois: ${depois}`);
-      }
-
-      if (
-        JSON.stringify(original.relacionadosNaoAutorizados || []) !==
-        JSON.stringify(term.relacionadosNaoAutorizados || [])
-      ) {
-        const antes = (original.relacionadosNaoAutorizados || []).join("; ") || "—";
-        const depois = (term.relacionadosNaoAutorizados || []).join("; ") || "—";
-
-        changes.push(`Sinônimos não autorizados / UP alterados:\nAntes: ${antes}\nDepois: ${depois}`);
-      }
-
-      return changes.length ? changes : ["Alteração registrada."];
-    }
+    
         function createActionHistoryItem(term, decisao) {
           const resumo = pendingSummaryLines(term);
 
