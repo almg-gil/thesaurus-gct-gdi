@@ -178,6 +178,51 @@
       width: 100%;
     }
 
+    .term-suggest-wrap {
+      position: relative;
+      width: 100%;
+    }
+
+    .term-suggest-box {
+      position: absolute;
+      z-index: 50;
+      left: 0;
+      right: 0;
+      top: calc(100% + 2px);
+      max-height: 260px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+    }
+
+    .term-suggest-box.hidden {
+      display: none;
+    }
+
+    .term-suggest-option {
+      width: 100%;
+      display: block;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid #eee;
+      border-radius: 0;
+      padding: 8px 10px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .term-suggest-option:hover {
+      background: var(--selected);
+    }
+
+    .term-suggest-empty {
+      padding: 8px 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
     .login-logo-wrap {
       display: flex;
       justify-content: center;
@@ -2612,7 +2657,6 @@ function renderOriginalSummary(term) {
           </div>
             ${renderCompactRelatedList(term)}
             ${renderCompactUnauthorizedList(term)}
-            ${renderTermDatalist("relationTermSearchList", [term.id])}
           </div>
 
           <div id="comentarios" class="panel">
@@ -2845,6 +2889,120 @@ function renderOriginalSummary(term) {
           return null;
         }
 
+    function termSearchCandidates(query, excludeIds = []) {
+      const typed = normalizeSearchText(query);
+      const excluded = new Set(excludeIds.map(String));
+
+      if (!typed) return [];
+
+      return state.terms
+        .filter(term =>
+          term.revisao !== REVIEW_EXCLUIR &&
+          !excluded.has(String(term.id))
+        )
+        .map(term => {
+          const termoNormalizado = normalizeSearchText(term.termo);
+          const caminhoNormalizado = normalizeSearchText(termPath(term));
+
+          let score = 99;
+
+          if (termoNormalizado === typed) {
+            score = 1;
+          } else if (termoNormalizado.startsWith(typed)) {
+            score = 2;
+          } else if (termoNormalizado.includes(typed)) {
+            score = 3;
+          } else if (caminhoNormalizado.includes(typed)) {
+            score = 4;
+          }
+
+          return { term, score };
+        })
+        .filter(item => item.score < 99)
+        .sort((a, b) => {
+          if (a.score !== b.score) return a.score - b.score;
+          return a.term.termo.localeCompare(b.term.termo, "pt-BR");
+        })
+        .slice(0, 30)
+        .map(item => item.term);
+    }
+
+    function setupTermAutocomplete(inputId, boxId, excludeIds = []) {
+      const input = document.getElementById(inputId);
+      const box = document.getElementById(boxId);
+
+      if (!input || !box) return;
+
+      function hideBox() {
+        box.classList.add("hidden");
+      }
+
+      function showSuggestions() {
+        const query = input.value.trim();
+        input.dataset.termId = "";
+
+        if (!query) {
+          hideBox();
+          return;
+        }
+
+        const matches = termSearchCandidates(query, excludeIds);
+
+        if (!matches.length) {
+          box.innerHTML = '<div class="term-suggest-empty">Nenhum termo encontrado.</div>';
+          box.classList.remove("hidden");
+          return;
+        }
+
+        box.innerHTML = matches
+          .map(term => `
+            <button type="button"
+                    class="term-suggest-option"
+                    data-term-id="${escapeAttr(term.id)}">
+              ${escapeHtml(term.termo)}
+            </button>
+          `)
+          .join("");
+
+        box.classList.remove("hidden");
+
+        box.querySelectorAll("[data-term-id]").forEach(option => {
+          option.onclick = () => {
+            const selectedTerm = getTerm(option.dataset.termId);
+
+            if (!selectedTerm) return;
+
+            input.value = selectedTerm.termo;
+            input.dataset.termId = selectedTerm.id;
+            hideBox();
+          };
+        });
+      }
+
+      input.addEventListener("input", showSuggestions);
+      input.addEventListener("focus", showSuggestions);
+
+      input.addEventListener("keydown", event => {
+        if (event.key === "Escape") {
+          hideBox();
+        }
+      });
+
+      input.addEventListener("blur", () => {
+        setTimeout(hideBox, 150);
+      });
+    }
+
+    function getTermIdFromSearchInput(input) {
+      if (!input) return null;
+
+      if (input.dataset.termId) {
+        return input.dataset.termId;
+      }
+
+      return findTermIdByTypedValue(input.value);
+    }
+
     function addUniqueValue(list, value) {
       if (!Array.isArray(list)) list = [];
       if (!list.includes(value)) list.push(value);
@@ -3013,11 +3171,13 @@ function renderOriginalSummary(term) {
 
                       <div id="replaceBox-${escapeAttr(rel.id)}" class="inline-action-box hidden">
                         <div class="term-search-row">
-                          <input id="replaceInput-${escapeAttr(rel.id)}"
-                                 list="relationTermSearchList"
-                                 placeholder="Digite para pesquisar o novo TR" />
+                          <div class="term-suggest-wrap">
+                            <input id="replaceInput-${escapeAttr(rel.id)}"
+                               placeholder="Digite para pesquisar o novo TR" />
+                          <div id="replaceSuggest-${escapeAttr(rel.id)}" class="term-suggest-box hidden"></div>
+                          </div>
                           <button data-rel-action="confirm-replace"
-                                  data-target-id="${escapeAttr(rel.id)}">OK</button>
+                            data-target-id="${escapeAttr(rel.id)}">OK</button>
                         </div>
                       </div>
                     </div>
@@ -3028,11 +3188,13 @@ function renderOriginalSummary(term) {
           }
 
           <div class="term-search-row">
-            <input id="addRelatedInput"
-                   list="relationTermSearchList"
-                   placeholder="Digite para adicionar um TR" />
-            <button id="addRelatedBtn" class="icon-btn success" title="Adicionar TR">＋</button>
+            <div class="term-suggest-wrap">
+              <input id="addRelatedInput"
+                 placeholder="Digite para adicionar um TR" />
+              <div id="addRelatedSuggest" class="term-suggest-box hidden"></div>
           </div>
+          <button id="addRelatedBtn" class="icon-btn success" title="Adicionar TR">＋</button>
+        </div>
         </div>
       `;
     }
@@ -3070,11 +3232,13 @@ function renderOriginalSummary(term) {
 
                       <div id="moveUpBox-${escapeAttr(slugIcmg(nome))}" class="inline-action-box hidden">
                         <div class="term-search-row">
-                          <input id="moveUpInput-${escapeAttr(slugIcmg(nome))}"
-                                 list="relationTermSearchList"
-                                 placeholder="Digite para escolher o novo termo" />
-                          <button data-up-action="confirm-move"
-                                  data-up-value="${escapeAttr(nome)}">OK</button>
+                          <div class="term-suggest-wrap">
+                            <input id="moveUpInput-${escapeAttr(slugIcmg(nome))}"
+                               placeholder="Digite para escolher o novo termo" />
+                          <div id="moveUpSuggest-${escapeAttr(slugIcmg(nome))}" class="term-suggest-box hidden"></div>
+                        </div>
+                        <button data-up-action="confirm-move"
+        data-up-value="${escapeAttr(nome)}">OK</button>
                         </div>
                       </div>
                     </div>
