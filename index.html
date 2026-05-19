@@ -3298,22 +3298,25 @@ function renderOriginalSummary(term) {
       `;
     }
 
-    function wireTermArea(term) {
-        termArea.querySelectorAll(".tab").forEach(tab => {
-          tab.addEventListener("click", () => {
-            const targetId = tab.dataset.tab;
+    setupTermAutocomplete("addRelatedInput", "addRelatedSuggest", [term.id]);
 
-            termArea.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-            termArea.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+(term.relacionados || []).forEach(relatedId => {
+  setupTermAutocomplete(
+    `replaceInput-${relatedId}`,
+    `replaceSuggest-${relatedId}`,
+    [term.id, relatedId]
+  );
+});
 
-            tab.classList.add("active");
+(term.relacionadosNaoAutorizados || []).forEach(nome => {
+  const slug = slugIcmg(nome);
 
-            const targetPanel = termArea.querySelector(`#${targetId}`);
-            if (targetPanel) {
-              targetPanel.classList.add("active");
-            }
-          });
-        });
+  setupTermAutocomplete(
+    `moveUpInput-${slug}`,
+    `moveUpSuggest-${slug}`,
+    [term.id]
+  );
+});
 
       const saveBtn = document.getElementById("saveTermBtn");
       if (saveBtn) {
