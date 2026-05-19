@@ -2499,6 +2499,23 @@ function renderOriginalSummary(term) {
       return options.join("");
     }
 
+    function isDescendantOf(candidateId, possibleAncestorId) {
+      let current = getTerm(candidateId);
+      const guard = new Set();
+
+      while (current && current.parentId && !guard.has(current.id)) {
+        guard.add(current.id);
+
+        if (current.parentId === possibleAncestorId) {
+          return true;
+        }
+
+        current = getTerm(current.parentId);
+      }
+
+      return false;
+    }
+
     function relatedOptions(currentId) {
       const current = getTerm(currentId);
       const selected = new Set(current?.relacionados || []);
