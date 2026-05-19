@@ -2339,75 +2339,14 @@ function renderOriginalSummary(term) {
             <strong>Termos específicos</strong>
             ${children.length ? `<ul class="small-list">${children.map(c => `<li>${escapeHtml(c.termo)} ${c.revisao !== REVIEW_ORIGINAL ? `<span class="review-badge ${c.revisao}">${reviewLabel(c.revisao)}</span>` : ""}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
           </div>
-
-          <div class="relation-box">
-            <strong>Sinônimos autorizados / TR</strong>
-
-            ${
-              relatedTerms.length
-                ? `<ul class="small-list">
-                    ${relatedTerms.map(r => `
-                      <li>
-                        <strong>${escapeHtml(r.termo)}</strong>
-                        ${r.revisao !== REVIEW_ORIGINAL ? `<span class="review-badge ${escapeAttr(r.revisao)}">${escapeHtml(reviewLabel(r.revisao))}</span>` : ""}
-
-                        <div class="toolbar">
-                          <button data-related-action="view" data-related-id="${escapeAttr(r.id)}">Ver termo</button>
-                          <button class="danger" data-related-action="remove" data-related-id="${escapeAttr(r.id)}">Remover relação</button>
-                          <button data-related-action="replace" data-related-id="${escapeAttr(r.id)}">Substituir TR</button>
-                        </div>
-                      </li>
-                    `).join("")}
-                  </ul>`
-                : '<div class="muted">—</div>'
-            }
-
-            <div class="toolbar">
-              <select id="addRelatedSelect">${relatedOptions(term.id)}</select>
-              <button id="addRelatedBtn">Adicionar TR</button>
-              <button id="createRelatedTermBtn">Criar novo termo autorizado relacionado</button>
-            </div>
-
-            <div class="toolbar">
-              <select id="replaceRelatedTargetSelect">${relatedOptions(term.id)}</select>
-              <span class="muted">Para substituir um TR, selecione aqui o novo termo e depois clique em “Substituir TR”.</span>
-            </div>
+            ${renderCompactRelatedList(term)}
+            ${renderCompactUnauthorizedList(term)}
+            ${renderTermDatalist("relationTermSearchList", [term.id])}
           </div>
 
-          <div class="relation-box">
-            <strong>Sinônimos não autorizados / UP</strong>
+          <div id="comentarios" class="panel">
 
-            ${
-              naoAutorizados.length
-                ? `<ul class="small-list">
-                    ${naoAutorizados.map((up, index) => `
-                      <li>
-                        <strong>${escapeHtml(up)}</strong>
-
-                        <div class="toolbar">
-                          <button data-up-action="edit" data-up-index="${index}">Editar UP</button>
-                          <button class="danger" data-up-action="remove" data-up-index="${index}">Sugerir retirada do UP</button>
-                          <button data-up-action="move" data-up-index="${index}">Mover UP</button>
-                        </div>
-                      </li>
-                    `).join("")}
-                  </ul>`
-                : '<div class="muted">—</div>'
-            }
-
-            <div class="toolbar">
-              <input id="newUnauthorizedInput" type="text" placeholder="Novo sinônimo não autorizado / UP" />
-              <button id="addUnauthorizedBtn">Adicionar UP</button>
-            </div>
-
-            <div class="toolbar">
-              <select id="moveUnauthorizedTargetSelect">${termOptionsForMoveUp(term.id)}</select>
-              <span class="muted">Para mover um UP, selecione aqui o termo de destino e depois clique em “Mover UP”.</span>
-            </div>
-          </div>
-        </div>
-
-        <div id="comentarios" class="panel">
+                
 
           
                   <div class="field">
