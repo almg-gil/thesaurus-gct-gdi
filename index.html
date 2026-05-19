@@ -2555,7 +2555,8 @@ function renderOriginalSummary(term) {
       treeEl.appendChild(item);
 
       if (expanded) {
-        children.forEach(child => renderTreeNode(child, level + 1, query));
+        const childQuery = query && matchesTerm(term, query) ? "" : query;
+        children.forEach(child => renderTreeNode(child, level + 1, childQuery));
       }
     }
 
