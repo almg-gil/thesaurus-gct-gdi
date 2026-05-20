@@ -1431,6 +1431,27 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     }
 
+    function formatDateTimeBr(value) {
+      const text = String(value || "").trim();
+
+      if (!text) return "";
+
+      // Já está no padrão brasileiro: dd-mm-aaaa HH:mm
+      if (/^\d{2}-\d{2}-\d{4}/.test(text)) {
+        return text;
+      }
+
+      // Converte: aaaa-mm-dd HH:mm
+      const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
+
+      if (match) {
+        const [, year, month, day, rest] = match;
+        return `${day}-${month}-${year}${rest || ""}`;
+      }
+
+      return text;
+    }
+
     function sleep(ms) {
       return new Promise(resolve => setTimeout(resolve, ms));
     }
