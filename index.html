@@ -3057,17 +3057,28 @@ function renderOriginalSummary(term) {
     }
 
     function addUnauthorizedRelation(term, value) {
-      if (!term || !value) return false;
+      const upValue = String(value || "").trim();
 
-      ensureOriginal(term);
+      if (!term || !upValue) return false;
 
       term.relacionadosNaoAutorizados = Array.isArray(term.relacionadosNaoAutorizados)
         ? term.relacionadosNaoAutorizados
         : [];
 
-      if (!term.relacionadosNaoAutorizados.includes(value)) {
-        term.relacionadosNaoAutorizados.push(value);
+      const newKey = normalizeUpDuplicateKey(upValue);
+
+      const alreadyExists = term.relacionadosNaoAutorizados.some(existing =>
+        normalizeUpDuplicateKey(existing) === newKey
+      );
+
+      if (alreadyExists) {
+        alert(`Este UP já existe neste termo: "${upValue}".`);
+        return false;
       }
+
+      ensureOriginal(term);
+
+      term.relacionadosNaoAutorizados.push(upValue);
 
       markModified(term);
       return true;
@@ -3129,14 +3140,23 @@ function renderOriginalSummary(term) {
         ? target.relacionadosNaoAutorizados
         : [];
 
-      if (!target.relacionadosNaoAutorizados.includes(value)) {
-        target.relacionadosNaoAutorizados.push(value);
-      }
+      const valueKey = normalizeUpDuplicateKey(value);
 
-      markModified(term);
-      markModified(target);
+      const targetAlreadyHasValue = target.relacionadosNaoAutorizados.some(existing =>
+        normalizeUpDuplicateKey(existing) === valueKey
+      );
 
-      return true;
+      if (targetAlreadyHasValue) {
+        alert(`O termo de destino já possui o UP "${value}".`);
+        return false;
+}
+
+target.relacionadosNaoAutorizados.push(value);
+
+markModified(term);
+markModified(target);
+
+return true;
     }
 
     function renderCompactRelatedList(term) {
@@ -3504,7 +3524,9 @@ function renderOriginalSummary(term) {
                 const upValue = String(value || "").trim();
                 if (!upValue) return;
 
-                addUnauthorizedRelation(term, upValue);
+                const added = addUnauthorizedRelation(term, upValue);
+
+                if (!added) return;
 
                 await saveState();
                 render();
@@ -3541,12 +3563,14 @@ function renderOriginalSummary(term) {
                     return;
                   }
 
-                  moveUnauthorizedRelation(term, index, targetTermId);
+                  const moved = moveUnauthorizedRelation(term, index, targetTermId);
 
-                  await saveState();
-                  render();
-                  setActiveTab("relacoes");
-                  return;
+                  if (!moved) return;
+
+                await saveState();
+                render();
+                setActiveTab("relacoes");
+                return;
                 }
 
                 if (action === "delete") {
@@ -3979,6 +4003,16 @@ async function rejectPendingChange(changeId) {
         .toLowerCase();
     }
 
+    function normalizeUpDuplicateKey(value) {
+      return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    }
+    
     function isClasseIcmgIgnorada(classe) {
       return ICMG_CLASSES_IGNORADAS.has(normalizeIcmgName(classe));
     }
