@@ -1387,10 +1387,16 @@ O app usará os dados de exemplo.`);
         revisaoEm: term.revisaoEm || ""
       }));
 
-      if (!parsed.selectedId || !parsed.terms.some(t => t.id === parsed.selectedId)) {
-        parsed.selectedId = parsed.terms[0]?.id || null;
-      } else {
+      if (
+        parsed.selectedId === null ||
+        parsed.selectedId === undefined ||
+        parsed.selectedId === ""
+      ) {
+        parsed.selectedId = null;
+      } else if (parsed.terms.some(t => String(t.id) === String(parsed.selectedId))) {
         parsed.selectedId = String(parsed.selectedId);
+      } else {
+        parsed.selectedId = null;
       }
 
       return parsed;
@@ -4935,6 +4941,10 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
       state = normalizeState(state);
 
       const atualizadoPeloTxt = await importarIcmgGithubSeNecessario();
+
+      // Ao abrir o app, não mostra automaticamente o último termo salvo.
+      state.selectedId = null;
+      reviewMode = false;
 
       collapseOnlyClasses();
       render();
