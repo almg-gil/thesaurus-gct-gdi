@@ -1785,7 +1785,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
           <div class="muted">
             Decisão: <strong>${action.decisao === "aprovada" ? "aprovada" : "rejeitada"}</strong>
             por ${escapeHtml(action.decididoPor || "Usuário")}
-            ${action.decididoEm ? `em ${escapeHtml(action.decididoEm)}` : ""}
+            ${action.decididoEm ? `em ${escapeHtml(formatDateTimeBr(action.decididoEm))}` : ""}
           </div>
 
           ${
@@ -1796,7 +1796,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           ${
             action.sthStatus === "feito"
-              ? `<div class="muted">Feito no STH por ${escapeHtml(action.sthFeitoPor || "Usuário")} ${action.sthFeitoEm ? `em ${escapeHtml(action.sthFeitoEm)}` : ""}</div>`
+              ? `<div class="muted">Feito no STH por ${escapeHtml(action.sthFeitoPor || "Usuário")} ${action.sthFeitoEm ? `em ${escapeHtml(formatDateTimeBr(action.sthFeitoEm))}` : ""}</div>`
               : ""
           }
 
@@ -1852,7 +1852,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           <div class="muted">
             Comentário de ${escapeHtml(comment.author || "Usuário")}
-            ${comment.createdAt ? `em ${escapeHtml(comment.createdAt)}` : ""}
+            ${comment.createdAt ? `em ${escapeHtml(formatDateTimeBr(comment.createdAt))}` : ""}
           </div>
 
           <div style="margin-top: 6px;">${escapeHtml(comment.text || "").split("\\n").join("<br>")}</div>
@@ -1861,7 +1861,7 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
 
           ${
             visto
-              ? `<div class="muted" style="margin-top: 6px;">Visto por ${escapeHtml(comment.vistoPor || "Usuário")} ${comment.vistoEm ? `em ${escapeHtml(comment.vistoEm)}` : ""}</div>`
+              ? `<div class="muted" style="margin-top: 6px;">Visto por ${escapeHtml(comment.vistoPor || "Usuário")} ${comment.vistoEm ? `em ${escapeHtml(formatDateTimeBr(comment.vistoEm))}` : ""}</div>`
               : ""
           }
 
@@ -2043,7 +2043,7 @@ function renderPendingChangeItemHtml(change) {
         <div>
           <strong>${escapeHtml(displayTermName(term))}</strong>
           <div class="muted">${escapeHtml(termPath(term))}</div>
-          ${term.revisaoPor || term.revisaoEm ? `<div class="muted">Registrado por ${escapeHtml(term.revisaoPor || "Usuário")} ${term.revisaoEm ? `em ${escapeHtml(term.revisaoEm)}` : ""}</div>` : ""}
+          ${term.revisaoPor || term.revisaoEm ? `<div class="muted">Registrado por ${escapeHtml(term.revisaoPor || "Usuário")} ${term.revisaoEm ? `em ${escapeHtml(formatDateTimeBr(term.revisaoEm))}` : ""}</div>` : ""}
         </div>
         <span class="review-badge ${escapeAttr(change.type || "")}">${escapeHtml(change.typeLabel || "alteração")}</span>
       </div>
@@ -3306,12 +3306,12 @@ return true;
     function renderCommentHtml(c) {
       const statusClass = c.resolved ? "resolved" : "open";
       const statusLabel = c.resolved ? "resolvido" : "aberto";
-      const footer = c.resolved ? `<div class="muted">Resolvido por ${escapeHtml(c.resolvedBy || "")} em ${escapeHtml(c.resolvedAt || "")}</div>` : "";
+      const footer = c.resolved ? `<div class="muted">Resolvido por ${escapeHtml(c.resolvedBy || "")} em ${escapeHtml(formatDateTimeBr(c.resolvedAt))}</div>` : "";
 
       return `
         <div class="comment-box ${c.resolved ? "resolved" : ""}">
           <div class="comment-head">
-            <div><strong>${escapeHtml(c.author)}</strong> <span class="muted">· ${escapeHtml(c.createdAt)}</span></div>
+            <div><strong>${escapeHtml(c.author)}</strong> <span class="muted">· ${escapeHtml(formatDateTimeBr(c.createdAt))}</span></div>
             <span class="status-pill ${statusClass}">${statusLabel}</span>
           </div>
           <div>${escapeHtml(c.text || "").split("\\n").join("<br>")}</div>
@@ -3338,7 +3338,7 @@ return true;
           <strong>Respostas</strong>
           ${replies.map(reply => `
             <div class="reply-item">
-              <div><strong>${escapeHtml(reply.author || "Usuário")}</strong> <span class="muted">· ${escapeHtml(reply.createdAt || "")}</span></div>
+              <div><strong>${escapeHtml(reply.author || "Usuário")}</strong> <span class="muted">· ${escapeHtml(formatDateTimeBr(reply.createdAt))}</span></div>
               <div>${escapeHtml(reply.text || "").split("\\n").join("<br>")}</div>
             </div>
           `).join("")}
@@ -4531,7 +4531,7 @@ async function rejectPendingChange(changeId) {
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
-      doc.text(`Gerado por ${safePdfText(currentUser.value.trim() || "Usuário")} em ${safePdfText(nowLabel())}`, context.marginLeft, context.y);
+      doc.text(`Gerado por ${safePdfText(currentUser.value.trim() || "Usuário")} em ${safePdfText(formatDateTimeBr(nowLabel()))}`, context.marginLeft, context.y);
       context.y += 10;
 
       const actions = sortedActionHistory();
@@ -4564,14 +4564,14 @@ async function rejectPendingChange(changeId) {
           addPdfLine(doc, context, `Tipo: ${action.tipoLabel || action.tipo || "-"}`, { fontSize: 10 });
           addPdfLine(doc, context, `Decisão: ${action.decisao === "aprovada" ? "aprovada" : "rejeitada"}`, { fontSize: 10 });
           addPdfLine(doc, context, `Decidido por: ${action.decididoPor || "-"}`, { fontSize: 10 });
-          addPdfLine(doc, context, `Decidido em: ${action.decididoEm || "-"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Decidido em: ${formatDateTimeBr(action.decididoEm) || "-"}`, { fontSize: 10 });
 
           if (action.decisao === "aprovada") {
             addPdfLine(doc, context, `STH: ${action.sthStatus === "feito" ? "feito" : "aguardando execução"}`, { fontSize: 10 });
 
             if (action.sthStatus === "feito") {
               addPdfLine(doc, context, `Feito no STH por: ${action.sthFeitoPor || "-"}`, { fontSize: 10 });
-              addPdfLine(doc, context, `Feito no STH em: ${action.sthFeitoEm || "-"}`, { fontSize: 10 });
+              addPdfLine(doc, context, `Feito no STH em: ${formatDateTimeBr(action.sthFeitoEm) || "-"}`, { fontSize: 10 });
             }
           }
 
@@ -4597,7 +4597,7 @@ async function rejectPendingChange(changeId) {
           addPdfLine(doc, context, `Termo: ${term ? displayTermName(term) : "Termo não encontrado"}`, { fontSize: 11, fontStyle: "bold" });
           addPdfLine(doc, context, `Caminho: ${term ? termPath(term) : "-"}`, { fontSize: 10 });
           addPdfLine(doc, context, `Comentário de: ${comment.author || "Usuário"}`, { fontSize: 10 });
-          addPdfLine(doc, context, `Data: ${comment.createdAt || "-"}`, { fontSize: 10 });
+          addPdfLine(doc, context, `Data: ${formatDateTimeBr(comment.createdAt) || "-"}`, { fontSize: 10 });
           addPdfLine(doc, context, `Situação: ${comment.visto ? "visto" : "não visto"}${comment.resolved ? " / resolvido" : ""}`, { fontSize: 10 });
           addPdfLine(doc, context, `Comentário: ${comment.text || "-"}`, { fontSize: 10 });
 
@@ -4607,7 +4607,7 @@ async function rejectPendingChange(changeId) {
             addPdfLine(doc, context, "Respostas:", { fontSize: 10, fontStyle: "bold" });
 
             replies.forEach(reply => {
-              addPdfLine(doc, context, `- ${reply.author || "Usuário"} em ${reply.createdAt || "-"}: ${reply.text || ""}`, { fontSize: 10 });
+              addPdfLine(doc, context, `- ${reply.author || "Usuário"} em ${formatDateTimeBr(reply.createdAt) || "-"}: ${reply.text || ""}`, { fontSize: 10 });
             });
           }
 
