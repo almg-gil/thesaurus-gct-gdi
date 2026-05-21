@@ -645,6 +645,30 @@
       background: #fff;
     }
 
+    .relation-box-up {
+      border-left: 5px solid var(--red);
+    }
+
+    .relation-box-tr {
+      border-left: 5px solid var(--green);
+    }
+
+    .relation-box-up > strong {
+      color: var(--red);
+    }
+
+    .relation-box-tr > strong {
+      color: var(--green);
+    }
+
+    .relation-box-up .relation-row {
+      border-left: 4px solid rgba(168, 50, 50, 0.45);
+    }
+
+    .relation-box-tr .relation-row {
+      border-left: 4px solid rgba(31, 122, 58, 0.45);
+    }
+
     .comment-box.resolved {
       background: var(--soft);
       color: #555;
@@ -3183,7 +3207,7 @@ return true;
       const relatedTerms = (term.relacionados || []).map(getTerm).filter(Boolean);
 
       return `
-        <div class="relation-box">
+        <div class="relation-box relation-box-tr">
           <strong>Descritores autorizados (termos relacionados)</strong>
 
           ${
@@ -3252,7 +3276,7 @@ return true;
         : [];
 
       return `
-        <div class="relation-box">
+        <div class="relation-box relation-box-up">
           <strong>Sinônimos não autorizados (Usado por)</strong>
 
           ${
