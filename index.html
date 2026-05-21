@@ -3211,7 +3211,7 @@ return true;
                                   data-target-id="${escapeAttr(rel.id)}">✖</button>
 
                           <button class="icon-btn"
-                                  title="Substituir TR"
+                                  title="Mover relação para outro termo"
                                   data-rel-action="toggle-replace"
                                   data-target-id="${escapeAttr(rel.id)}">⇄</button>
                         </div>
@@ -3221,7 +3221,7 @@ return true;
                         <div class="term-search-row">
                           <div class="term-suggest-wrap">
                             <input id="replaceInput-${escapeAttr(rel.id)}"
-                               placeholder="Digite para pesquisar o novo TR" />
+                               placeholder="Digite para escolher o novo termo relacionado" />
                           <div id="replaceSuggest-${escapeAttr(rel.id)}" class="term-suggest-box hidden"></div>
                           </div>
                           <button data-rel-action="confirm-replace"
@@ -3493,7 +3493,7 @@ return true;
                   const newTargetId = getTermIdFromSearchInput(input);
 
                   if (!newTargetId) {
-                    alert("Digite e selecione um termo válido para substituir o TR.");
+                    alert("Digite e selecione um termo válido para receber esta relação.");
                     return;
                   }
 
