@@ -2683,8 +2683,8 @@ function renderOriginalSummary(term) {
             <strong>Termos específicos</strong>
             ${children.length ? `<ul class="small-list">${children.map(c => `<li>${escapeHtml(c.termo)} ${c.revisao !== REVIEW_ORIGINAL ? `<span class="review-badge ${c.revisao}">${reviewLabel(c.revisao)}</span>` : ""}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
           </div>
-            ${renderCompactRelatedList(term)}
-            ${renderCompactUnauthorizedList(term)}
+           ${renderCompactUnauthorizedList(term)}
+          ${renderCompactRelatedList(term)}
           </div>
 
           <div id="comentarios" class="panel">
