@@ -1,4 +1,4 @@
-<!doctype html>
+  <!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
@@ -1367,6 +1367,7 @@ O app usará os dados de exemplo.`);
         decisao: action.decisao || "",
         decididoPor: action.decididoPor || "",
         decididoEm: action.decididoEm || "",
+        justificativa: action.justificativa || "",
         resumo: Array.isArray(action.resumo) ? action.resumo.map(String) : [],
         original: action.original && typeof action.original === "object" ? action.original : null,
         final: action.final && typeof action.final === "object" ? action.final : null,
@@ -1452,6 +1453,23 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
       const d = new Date();
       const pad = n => String(n).padStart(2, "0");
       return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function pedirJustificativaRejeicao() {
+      const value = prompt("Justificativa:");
+
+      if (value === null) {
+        return null;
+      }
+
+      const justificativa = String(value || "").trim();
+
+      if (!justificativa) {
+        alert("Informe a justificativa da rejeição.");
+        return null;
+      }
+
+      return justificativa;
     }
 
     function formatDateTimeBr(value) {
@@ -1810,6 +1828,11 @@ Detalhe: ${error.message || JSON.stringify(error)}`);
             por ${escapeHtml(action.decididoPor || "Usuário")}
             ${action.decididoEm ? `em ${escapeHtml(formatDateTimeBr(action.decididoEm))}` : ""}
           </div>
+          ${
+            action.decisao === "rejeitada" && action.justificativa
+            ? `<div style="margin-top: 6px;"><strong>Justificativa:</strong> ${escapeHtml(action.justificativa)}</div>`
+            : ""
+          }
 
           ${
             aprovado
@@ -2352,7 +2375,7 @@ function renderOriginalSummary(term) {
           return pendingChangeItems(term).map(changeTextForHistory);
         }
     
-        function createActionHistoryItem(term, decisao) {
+        function createActionHistoryItem(term, decisao, justificativa = "") {
           const resumo = pendingSummaryLines(term);
 
           return {
@@ -2365,6 +2388,7 @@ function renderOriginalSummary(term) {
             decisao,
             decididoPor: currentUser.value.trim() || "Usuário",
             decididoEm: nowLabel(),
+            justificativa: justificativa || "",
             resumo,
             original: term.original ? structuredClone(term.original) : null,
             final: snapshotTerm(term),
@@ -2374,11 +2398,10 @@ function renderOriginalSummary(term) {
           };
         }
 
-    function registrarDecisao(term, decisao) {
+    function registrarDecisao(term, decisao, justificativa = "") {
       state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory : [];
-      state.actionHistory.push(createActionHistoryItem(term, decisao));
+      state.actionHistory.push(createActionHistoryItem(term, decisao, justificativa));
     }
-
     async function marcarFeitoNoSth(actionId) {
       if (!userCanAccessManagement()) {
         alert("Você não tem permissão para marcar ações como feitas no STH.");
@@ -3754,7 +3777,7 @@ function refreshReviewAfterSingleChange(term) {
   }
 }
 
-function createActionHistoryItemFromChange(term, change, decisao) {
+function createActionHistoryItemFromChange(term, change, decisao, justificativa = "") {
   return {
     id: uid("action"),
     termId: term.id,
@@ -3765,6 +3788,7 @@ function createActionHistoryItemFromChange(term, change, decisao) {
     decisao,
     decididoPor: currentUser.value.trim() || "Usuário",
     decididoEm: nowLabel(),
+    justificativa: justificativa || "",
     resumo: [changeTextForHistory(change)],
     original: term.original ? structuredClone(term.original) : null,
     final: snapshotTerm(term),
@@ -3774,9 +3798,9 @@ function createActionHistoryItemFromChange(term, change, decisao) {
   };
 }
 
-function registrarDecisaoMudanca(term, change, decisao) {
+function registrarDecisaoMudanca(term, change, decisao, justificativa = "") {
   state.actionHistory = Array.isArray(state.actionHistory) ? state.actionHistory : [];
-  state.actionHistory.push(createActionHistoryItemFromChange(term, change, decisao));
+  state.actionHistory.push(createActionHistoryItemFromChange(term, change, decisao, justificativa));
 }
 
 async function approvePendingChange(changeId) {
@@ -3839,13 +3863,19 @@ async function rejectPendingChange(changeId) {
   if (!term) return;
 
   if (change.kind === "whole-new" || change.kind === "whole-delete") {
-    await rejectPending(term.id);
-    return;
-  }
+      await rejectPending(term.id);
+      return;
+    }
 
-  if (!term.original) return;
+    if (!term.original) return;
 
-  registrarDecisaoMudanca(term, change, "rejeitada");
+    const justificativa = pedirJustificativaRejeicao();
+
+    if (justificativa === null) {
+      return;
+    }
+
+registrarDecisaoMudanca(term, change, "rejeitada", justificativa);
 
   if (change.kind === "field" || change.kind === "parent") {
     term[change.field] = term.original[change.field] || null;
@@ -3906,7 +3936,7 @@ async function rejectPendingChange(changeId) {
       }
     }
 
-    async function rejectPending(termId) {
+    async function rejectPending(termId, justificativaRecebida = null) {
       if (!userCanAccessManagement()) {
         alert("Você não tem permissão para rejeitar ações.");
         return;
@@ -3922,19 +3952,37 @@ async function rejectPendingChange(changeId) {
 
       if (!confirm(`Rejeitar e remover o termo novo "${displayTermName(term)}"?`)) return;
 
-      registrarDecisao(term, "rejeitada");
-      removeTermCompletely(term.id);
-    } else if (term.revisao === REVIEW_MODIFICADO) {
-      registrarDecisao(term, "rejeitada");
+      const justificativa = justificativaRecebida || pedirJustificativaRejeicao();
 
-      if (term.original) {
-        restoreTermFromOriginal(term);
-      }
+    if (justificativa === null) {
+      return;
+    }
+
+registrarDecisao(term, "rejeitada", justificativa);
+removeTermCompletely(term.id);
+    } else if (term.revisao === REVIEW_MODIFICADO) {
+      const justificativa = justificativaRecebida || pedirJustificativaRejeicao();
+
+    if (justificativa === null) {
+      return;
+    }
+
+    registrarDecisao(term, "rejeitada", justificativa);
+
+    if (term.original) {
+      restoreTermFromOriginal(term);
+    }
 
       clearReview(term);
     } else if (term.revisao === REVIEW_EXCLUIR) {
-      registrarDecisao(term, "rejeitada");
-      clearReview(term);
+      const justificativa = justificativaRecebida || pedirJustificativaRejeicao();
+
+    if (justificativa === null) {
+      return;
+    }
+
+    registrarDecisao(term, "rejeitada", justificativa);
+    clearReview(term);
     }
 
     await saveState();
@@ -4588,6 +4636,10 @@ async function rejectPendingChange(changeId) {
           addPdfLine(doc, context, `Decisão: ${action.decisao === "aprovada" ? "aprovada" : "rejeitada"}`, { fontSize: 10 });
           addPdfLine(doc, context, `Decidido por: ${action.decididoPor || "-"}`, { fontSize: 10 });
           addPdfLine(doc, context, `Decidido em: ${formatDateTimeBr(action.decididoEm) || "-"}`, { fontSize: 10 });
+
+          if (action.decisao === "rejeitada" && action.justificativa) {
+            addPdfLine(doc, context, `Justificativa: ${action.justificativa}`, { fontSize: 10 });
+          }
 
           if (action.decisao === "aprovada") {
             addPdfLine(doc, context, `STH: ${action.sthStatus === "feito" ? "feito" : "aguardando execução"}`, { fontSize: 10 });
