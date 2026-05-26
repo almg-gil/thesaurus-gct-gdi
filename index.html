@@ -1312,7 +1312,9 @@ O app usará os dados de exemplo.`);
         return structuredClone(exemplo);
       }
 
-      return normalizeState(data?.payload);
+      const loaded = normalizeState(data?.payload);
+      loaded.selectedId = null;
+      return loaded;
     }
 
     function normalizeReview(term) {
@@ -1431,11 +1433,15 @@ O app usará os dados de exemplo.`);
     async function saveState() {
       state = normalizeState(state);
 
+      // selectedId é estado visual da tela, não deve ser persistido no Supabase.
+      const payloadToSave = structuredClone(state);
+      payloadToSave.selectedId = null;
+
       const { error } = await db
         .from("app_state")
         .upsert({
           id: "tesauro",
-          payload: state,
+          payload: payloadToSave,
           updated_at: new Date().toISOString()
         });
 
@@ -1443,7 +1449,7 @@ O app usará os dados de exemplo.`);
         console.error(error);
         alert(`Não foi possível salvar os dados no Supabase.
 
-Detalhe: ${error.message || JSON.stringify(error)}`);
+    Detalhe: ${error.message || JSON.stringify(error)}`);
       }
     }
 
@@ -4464,17 +4470,13 @@ removeTermCompletely(term.id);
           .filter(term => term.parentId === null)
           .map(term => term.id);
 
-        const selectedIdAtualExiste = state.selectedId && idsValidos.has(state.selectedId);
-
         const comments = [];
 
         state = normalizeState({
-          selectedId: selectedIdAtualExiste ? state.selectedId : (termos[0]?.id || null),
+          selectedId: null,
           expanded: rootIds,
           terms: termos,
-          comments,
-          icmgSourceVersion: ICMG_IMPORT_VERSION,
-          icmgSourceImportedAt: nowLabel()
+          comments: []
         });
 
         reviewMode = false;
