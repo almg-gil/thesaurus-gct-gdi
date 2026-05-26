@@ -1217,6 +1217,12 @@ function userCanAccessManagement() {
         appStarted = true;
         initResizableLayout();
         await iniciarApp();
+      } else {
+        // Ao entrar novamente sem recarregar a página,
+        // limpa apenas a seleção visual em memória.
+        state.selectedId = null;
+        reviewMode = false;
+        render();
       }
     }
 
@@ -1262,6 +1268,12 @@ function userCanAccessManagement() {
       currentUser.value = "";
       currentProfile.value = "";
       currentUserDisplay.textContent = "";
+
+      // Limpa o termo aberto na memória da aba.
+      state.selectedId = null;
+      reviewMode = false;
+
+      render();
 
       mostrarTelaLogin();
     }
