@@ -4088,10 +4088,22 @@ removeTermCompletely(term.id);
         .toLowerCase();
     }
 
-    const ICMG_CLASSES_IGNORADAS = new Set([
+    const ICMG_CLASSES_SEM_RAIZ = new Set([
       "sem classe",
       "estrutura administrativa"
     ]);
+
+    const ICMG_CLASSES_DESCARTADAS = new Set([
+      "thesaurus"
+    ]);
+
+    function isClasseIcmgSemRaiz(classe) {
+      return ICMG_CLASSES_SEM_RAIZ.has(normalizeIcmgName(classe));
+    }
+
+    function isClasseIcmgDescartada(classe) {
+      return ICMG_CLASSES_DESCARTADAS.has(normalizeIcmgName(classe));
+    }
 
     function normalizeSearchText(value) {
       return String(value || "")
@@ -4270,7 +4282,18 @@ removeTermCompletely(term.id);
 
       const authorizedRecords = records.filter(record => {
         if (record.kind !== "TERMO") return false;
-        if (!firstField(record, "TERMO")) return false;
+
+        const termo = firstField(record, "TERMO");
+        if (!termo) return false;
+
+        const classe = firstField(record, "CLASSE") || "Sem classe";
+
+        // Descarta classes que não devem aparecer nem como raiz nem como termo.
+        if (isClasseIcmgDescartada(classe)) return false;
+
+        // Evita importar o próprio nome da classe como termo filho/raiz.
+        // Ex.: Tema dentro de Tema, Tempo dentro de Tempo, Thesaurus etc.
+        if (normalizeIcmgName(termo) === normalizeIcmgName(classe)) return false;
 
         return true;
       });
@@ -4291,7 +4314,11 @@ removeTermCompletely(term.id);
       const classes = Array.from(new Set(
         terms
           .map(term => term._classe || "Sem classe")
-          .filter(classe => classe && !isClasseIcmgIgnorada(classe))
+          .filter(classe =>
+            classe &&
+            !isClasseIcmgSemRaiz(classe) &&
+            !isClasseIcmgDescartada(classe)
+          )
       )).sort((a, b) => a.localeCompare(b, "pt-BR"));
 
       const classTerms = classes.map(classe => ({
