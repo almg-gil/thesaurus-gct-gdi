@@ -4124,10 +4124,6 @@ removeTermCompletely(term.id);
         .trim()
         .toLowerCase();
     }
-    
-    function isClasseIcmgIgnorada(classe) {
-      return ICMG_CLASSES_IGNORADAS.has(normalizeIcmgName(classe));
-    }
 
     function slugIcmg(value) {
       return String(value || "")
@@ -4405,10 +4401,12 @@ removeTermCompletely(term.id);
             .map(term => term.id);
 
           state = normalizeState({
-            selectedId: termos[0]?.id || null,
+            selectedId: null,
             expanded: rootIds,
             terms: termos,
-            comments: []
+            comments: [],
+            icmgSourceVersion: ICMG_IMPORT_VERSION,
+            icmgSourceImportedAt: nowLabel()
           });
 
           reviewMode = false;
@@ -4496,8 +4494,6 @@ removeTermCompletely(term.id);
         const rootIds = termos
           .filter(term => term.parentId === null)
           .map(term => term.id);
-
-        const comments = [];
 
         state = normalizeState({
           selectedId: null,
