@@ -4265,9 +4265,7 @@ removeTermCompletely(term.id);
         if (record.kind !== "TERMO") return false;
         if (!firstField(record, "TERMO")) return false;
 
-        const classe = firstField(record, "CLASSE") || "Sem classe";
-
-        return !isClasseIcmgIgnorada(classe);
+        return true;
       });
 
       const terms = authorizedRecords.map(termoFromIcmgRecord);
@@ -4284,7 +4282,9 @@ removeTermCompletely(term.id);
       }
 
       const classes = Array.from(new Set(
-        terms.map(term => term._classe || "Sem classe").filter(Boolean)
+        terms
+          .map(term => term._classe || "Sem classe")
+          .filter(classe => classe && !isClasseIcmgIgnorada(classe))
       )).sort((a, b) => a.localeCompare(b, "pt-BR"));
 
       const classTerms = classes.map(classe => ({
