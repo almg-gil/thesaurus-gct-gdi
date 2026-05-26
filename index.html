@@ -975,7 +975,7 @@
     const ALMG_PAGE_SIZE = 1000;
     const ALMG_DELAY_MS = 1100;
     const ICMG_TXT_URL = "dados/ICMG.txt";
-    const ICMG_IMPORT_VERSION = "icmg-base-009";
+    const ICMG_IMPORT_VERSION = "icmg-base-010";
 
     const REVIEW_ORIGINAL = "original";
     const REVIEW_MODIFICADO = "modificado";
@@ -4097,12 +4097,20 @@ removeTermCompletely(term.id);
       "thesaurus"
     ]);
 
+    const ICMG_TERMOS_DESCARTADOS = new Set([
+      "thesaurus"
+    ]);
+
     function isClasseIcmgSemRaiz(classe) {
       return ICMG_CLASSES_SEM_RAIZ.has(normalizeIcmgName(classe));
     }
 
     function isClasseIcmgDescartada(classe) {
       return ICMG_CLASSES_DESCARTADAS.has(normalizeIcmgName(classe));
+    }
+
+    function isTermoIcmgDescartado(termo) {
+      return ICMG_TERMOS_DESCARTADOS.has(normalizeIcmgName(termo));
     }
 
     function normalizeSearchText(value) {
@@ -4284,11 +4292,13 @@ removeTermCompletely(term.id);
 
         const classe = firstField(record, "CLASSE") || "Sem classe";
 
+        // Descarta termos estruturais que não devem aparecer na árvore.
+        if (isTermoIcmgDescartado(termo)) return false;
+
         // Descarta classes que não devem aparecer nem como raiz nem como termo.
         if (isClasseIcmgDescartada(classe)) return false;
 
         // Evita importar o próprio nome da classe como termo filho/raiz.
-        // Ex.: Tema dentro de Tema, Tempo dentro de Tempo, Thesaurus etc.
         if (normalizeIcmgName(termo) === normalizeIcmgName(classe)) return false;
 
         return true;
