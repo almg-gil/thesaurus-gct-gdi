@@ -2446,6 +2446,15 @@ function renderOriginalSummary(term) {
       return term.termo;
     }
 
+    function objetosIndexadosLinks(term) {
+      const tag = encodeURIComponent(term?.termo || "");
+
+      return {
+        normas: `https://www.almg.gov.br/atividade-parlamentar/leis/legislacao-mineira?tag=${tag}`,
+        proposicoes: `https://www.almg.gov.br/atividade-parlamentar/projetos-de-lei/?tag=${tag}`
+      };
+    }
+
     function hasMatchingDescendant(term, query) {
       if (!query) return true;
       if (matchesTerm(term, query)) return true;
@@ -2690,6 +2699,7 @@ function renderOriginalSummary(term) {
       const deleteButtonLabel = term.revisao === REVIEW_EXCLUIR ? "Cancelar sugestão de exclusão" : "Sugerir exclusão";
       const deleteButtonClass = term.revisao === REVIEW_EXCLUIR ? "success" : "danger";
       const pendingCount = pendingChangeItems(term).length;
+      const linksObjetosIndexados = objetosIndexadosLinks(term);
 
       termArea.innerHTML = `
         <div class="term-header">
@@ -2703,6 +2713,7 @@ function renderOriginalSummary(term) {
         <div class="tabs">
           <button class="tab active" data-tab="cadastro">Cadastro</button>
           <button class="tab" data-tab="relacoes">Relacionamentos</button>
+          <button class="tab" data-tab="objetosIndexados">Objetos Indexados</button>
           <button class="tab" data-tab="comentarios">Comentários (${comments.filter(c => !c.resolved).length} abertos)</button>
           ${userCanAccessManagement() ? `<button class="tab" data-tab="pendencias">Pendências (${pendingCount})</button>` : ""}
         </div>
@@ -2749,11 +2760,36 @@ function renderOriginalSummary(term) {
             <strong>Termos específicos</strong>
             ${children.length ? `<ul class="small-list">${children.map(c => `<li>${escapeHtml(c.termo)} ${c.revisao !== REVIEW_ORIGINAL ? `<span class="review-badge ${c.revisao}">${reviewLabel(c.revisao)}</span>` : ""}</li>`).join("")}</ul>` : '<div class="muted">—</div>'}
           </div>
-           ${renderCompactUnauthorizedList(term)}
-          ${renderCompactRelatedList(term)}
-          </div>
 
-          <div id="comentarios" class="panel">
+          ${renderCompactUnauthorizedList(term)}
+          ${renderCompactRelatedList(term)}
+        </div>
+
+        <div id="objetosIndexados" class="panel">
+          <div class="relation-box">
+            <strong>Objetos indexados</strong>
+
+            <div class="small-list" style="margin-top: 8px;">
+              <div>
+                <a
+                  href="${escapeAttr(linksObjetosIndexados.normas)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >Normas</a>
+              </div>
+
+              <div>
+                <a
+                  href="${escapeAttr(linksObjetosIndexados.proposicoes)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >Proposições</a>
+              </div>
+            </div>
+        </div>
+        </div>
+
+        <div id="comentarios" class="panel">
 
                 
 
