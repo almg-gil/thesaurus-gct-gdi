@@ -2451,7 +2451,8 @@ function renderOriginalSummary(term) {
 
       return {
         normas: `https://www.almg.gov.br/atividade-parlamentar/leis/legislacao-mineira?tag=${tag}`,
-        proposicoes: `https://www.almg.gov.br/atividade-parlamentar/projetos-de-lei/?tag=${tag}`
+        proposicoes: `https://www.almg.gov.br/atividade-parlamentar/projetos-de-lei/?tag=${tag}`,
+        pronunciamentos: `https://www.almg.gov.br/atividade-parlamentar/plenario/pronunciamentos?tag=${tag}`
       };
     }
 
@@ -2784,6 +2785,14 @@ function renderOriginalSummary(term) {
                   target="_blank"
                   rel="noopener noreferrer"
                 >Proposições</a>
+              </div>
+
+              <div>
+                <a
+                  href="${escapeAttr(linksObjetosIndexados.pronunciamentos)}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Pronunciamentos</a>
               </div>
             </div>
         </div>
