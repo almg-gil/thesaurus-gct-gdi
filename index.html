@@ -979,6 +979,7 @@
     const ALMG_DELAY_MS = 1100;
     const ICMG_TXT_URL = "dados/ICMG.txt";
     const ICMG_IMPORT_VERSION = "icmg-base-010";
+    const FORCE_REIMPORT_ICMG_ON_START = true;
 
     const REVIEW_ORIGINAL = "original";
     const REVIEW_MODIFICADO = "modificado";
@@ -4826,14 +4827,14 @@ removeTermCompletely(term.id);
       return new TextDecoder("windows-1252").decode(buffer);
     }
 
-    async function importarIcmgGithubSeNecessario() {
+    async function importarIcmgGithubSeNecessario({ forcar = false } = {}) {
       try {
         // REGRA DE SEGURANÇA:
         // Se já existe estrutura carregada do Supabase, nunca substitui automaticamente.
         // Importação automática só deve acontecer quando não houver nenhum termo salvo.
-        if (Array.isArray(state.terms) && state.terms.length > 0) {
-          return false;
-        }
+       if (!forcar && Array.isArray(state.terms) && state.terms.length > 0) {
+              return false;
+            }
 
         setStatus("Importando ICMG.txt do GitHub...");
 
@@ -5454,9 +5455,9 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
       state = await loadState();
       state = normalizeState(state);
 
-      const atualizadoPeloTxt = false;
-        // Importação automática desativada para evitar substituição acidental da base.
-        // Para recarregar a estrutura, usar apenas os botões de importação manual.
+      const atualizadoPeloTxt = FORCE_REIMPORT_ICMG_ON_START
+          ? await importarIcmgGithubSeNecessario({ forcar: true })
+          : await importarIcmgGithubSeNecessario();
 
       // Ao abrir o app, não mostra automaticamente o último termo salvo.
       state.selectedId = null;
