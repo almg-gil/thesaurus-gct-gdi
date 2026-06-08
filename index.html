@@ -1810,12 +1810,13 @@ function userCanAccessManagement() {
     }
 
     function clearReview(term) {
-      if (!term) return;
-      term.revisao = REVIEW_ORIGINAL;
-      term.original = null;
-      term.revisaoPor = "";
-      term.revisaoEm = "";
-    }
+          if (!term) return;
+          term.revisao = REVIEW_ORIGINAL;
+          term.original = null;
+          term.revisaoPor = "";
+          term.revisaoEm = "";
+          term.pendingChanges = [];
+        }
 
     function markModified(term) {
       if (!term) return;
@@ -1857,6 +1858,55 @@ function userCanAccessManagement() {
     function pendingActionItems() {
       return getPendingTerms().flatMap(term => pendingChangeItems(term));
     }
+
+    function pendingActionGroups() {
+          const items = pendingActionItems();
+
+          const groupsByTerm = new Map();
+
+          items.forEach((item, index) => {
+            const termId = item.termId || "";
+
+            if (!groupsByTerm.has(termId)) {
+              groupsByTerm.set(termId, {
+                termId,
+                firstIndex: index,
+                firstTime: Number(item.createdAtMs || 0),
+                items: []
+              });
+            }
+
+            const group = groupsByTerm.get(termId);
+            group.items.push(item);
+
+            const itemTime = Number(item.createdAtMs || 0);
+            if (!group.firstTime || (itemTime && itemTime < group.firstTime)) {
+              group.firstTime = itemTime;
+            }
+          });
+
+          return Array.from(groupsByTerm.values())
+            .sort((a, b) => {
+              const timeA = Number(a.firstTime || 0);
+              const timeB = Number(b.firstTime || 0);
+
+              if (timeA && timeB && timeA !== timeB) return timeA - timeB;
+              if (timeA && !timeB) return -1;
+              if (!timeA && timeB) return 1;
+
+              return a.firstIndex - b.firstIndex;
+            })
+            .map(group => ({
+              ...group,
+              items: group.items.slice().sort((a, b) => {
+                const timeA = Number(a.createdAtMs || 0);
+                const timeB = Number(b.createdAtMs || 0);
+
+                if (timeA && timeB && timeA !== timeB) return timeA - timeB;
+                return String(a.createdAt || "").localeCompare(String(b.createdAt || ""), "pt-BR");
+              })
+            }));
+}
 
     function unseenComments() {
       return state.comments.filter(comment => comment.visto !== true);
@@ -1961,18 +2011,18 @@ function userCanAccessManagement() {
 
     function renderManagementActionsHtml() {
       if (managementActionFilter === "pendentes") {
-        const pendentes = pendingActionItems();
+          const groups = pendingActionGroups();
 
-        if (!pendentes.length) {
-          return '<div class="empty">Não há ações pendentes.</div>';
+          if (!groups.length) {
+            return '<div class="empty">Não há ações pendentes.</div>';
+          }
+
+          return `
+            <div class="pending-list">
+              ${groups.map(renderPendingTermGroupHtml).join("")}
+            </div>
+          `;
         }
-
-        return `
-          <div class="pending-list">
-            ${pendentes.map(renderPendingChangeItemHtml).join("")}
-          </div>
-        `;
-      }
 
       let actions = state.actionHistory.filter(action => {
         if (managementActionFilter === "aprovadas") return action.decisao === "aprovada";
@@ -2299,6 +2349,51 @@ function normalizeDiffValue(value) {
   return String(value || "").trim();
 }
 
+function renderPendingTermGroupHtml(group) {
+  const term = getTerm(group.termId);
+
+  return `
+    <div class="relation-box">
+      <div class="comment-head">
+        <div>
+          <strong>${escapeHtml(term ? displayTermName(term) : "Termo não encontrado")}</strong>
+          <div class="muted">${term ? escapeHtml(termPath(term)) : ""}</div>
+        </div>
+        <span class="review-badge modificado">${group.items.length} alteração(ões)</span>
+      </div>
+
+      <div class="pending-list">
+        ${group.items.map(renderPendingChangeInGroupHtml).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderPendingChangeInGroupHtml(change) {
+  return `
+    <div class="pending-card review-${escapeAttr(change.type || REVIEW_ORIGINAL)}">
+      <div class="pending-title">
+        <span class="review-badge ${escapeAttr(change.type || "")}">${escapeHtml(change.typeLabel || "alteração")}</span>
+        <strong>${escapeHtml(change.title || "Alteração")}</strong>
+      </div>
+
+      ${
+        change.author || change.createdAt
+          ? `<div class="muted">Registrado por ${escapeHtml(change.author || "Usuário")} ${change.createdAt ? `em ${escapeHtml(formatDateTimeBr(change.createdAt))}` : ""}</div>`
+          : ""
+      }
+
+      ${renderChangeSummaryHtml(change)}
+
+      <div class="toolbar">
+        <button data-pending-action="view" data-term-id="${escapeAttr(change.termId)}">Ver termo</button>
+        <button class="success" data-pending-action="approve-change" data-change-id="${escapeAttr(change.id)}">Aprovar</button>
+        <button class="danger" data-pending-action="reject-change" data-change-id="${escapeAttr(change.id)}">Rejeitar</button>
+      </div>
+    </div>
+  `;
+}
+
 function sameList(a, b) {
   return JSON.stringify((a || []).map(String)) === JSON.stringify((b || []).map(String));
 }
@@ -2357,7 +2452,10 @@ function pendingChangeItems(term) {
       kind: "whole-new",
       title: `Novo termo: ${term.termo || "—"}`,
       type: term.revisao,
-      typeLabel: reviewLabel(term.revisao)
+      typeLabel: reviewLabel(term.revisao),
+      author: term.revisaoPor || "Usuário",
+      createdAt: term.revisaoEm || "",
+      createdAtMs: 0
     }];
   }
 
@@ -2368,10 +2466,27 @@ function pendingChangeItems(term) {
       kind: "whole-delete",
       title: "Exclusão sugerida para este termo.",
       type: term.revisao,
-      typeLabel: reviewLabel(term.revisao)
+      typeLabel: reviewLabel(term.revisao),
+      author: term.revisaoPor || "Usuário",
+      createdAt: term.revisaoEm || "",
+      createdAtMs: 0
     }];
   }
 
+  const registeredChanges = Array.isArray(term.pendingChanges)
+    ? term.pendingChanges
+    : [];
+
+  if (registeredChanges.length) {
+    return registeredChanges.map(change => ({
+      ...change,
+      termId: term.id,
+      type: change.type || REVIEW_MODIFICADO,
+      typeLabel: change.typeLabel || reviewLabel(REVIEW_MODIFICADO)
+    }));
+  }
+
+  // Compatibilidade com dados antigos que ainda não têm pendingChanges.
   const original = term.original;
   if (!original) {
     return [{
@@ -2380,7 +2495,10 @@ function pendingChangeItems(term) {
       kind: "unknown",
       title: "Alteração registrada sem cópia anterior disponível.",
       type: term.revisao,
-      typeLabel: reviewLabel(term.revisao)
+      typeLabel: reviewLabel(term.revisao),
+      author: term.revisaoPor || "Usuário",
+      createdAt: term.revisaoEm || "",
+      createdAtMs: 0
     }];
   }
 
@@ -2400,8 +2518,13 @@ function pendingChangeItems(term) {
       title,
       currentValue: atual || "—",
       suggestedValue: sugestao || "—",
+      currentRaw: cloneRawValue(currentValue),
+      suggestedRaw: cloneRawValue(suggestedValue),
       type: term.revisao,
-      typeLabel: reviewLabel(term.revisao)
+      typeLabel: reviewLabel(term.revisao),
+      author: term.revisaoPor || "Usuário",
+      createdAt: term.revisaoEm || "",
+      createdAtMs: 0
     });
   }
 
@@ -2416,76 +2539,19 @@ function pendingChangeItems(term) {
       title: "Termo geral alterado",
       currentValue: getTermNameForSummary(original.parentId),
       suggestedValue: getTermNameForSummary(term.parentId),
+      currentRaw: cloneRawValue(original.parentId),
+      suggestedRaw: cloneRawValue(term.parentId),
       type: term.revisao,
-      typeLabel: reviewLabel(term.revisao)
+      typeLabel: reviewLabel(term.revisao),
+      author: term.revisaoPor || "Usuário",
+      createdAt: term.revisaoEm || "",
+      createdAtMs: 0
     });
   }
 
   addFieldChange("definicao", "Definição alterada", original.definicao, term.definicao);
   addFieldChange("notaEscopo", "Nota Explicativa alterada", original.notaEscopo, term.notaEscopo);
   addFieldChange("notaUso", "Nota Histórica alterada", original.notaUso, term.notaUso);
-
-  if (!sameList(original.relacionados, term.relacionados)) {
-    const adicionados = listAddedItems(original.relacionados, term.relacionados);
-    const removidos = listRemovedItems(original.relacionados, term.relacionados);
-
-    adicionados.forEach(id => {
-      changes.push({
-        id: `${term.id}::tr-add::${id}`,
-        termId: term.id,
-        kind: "list-add",
-        field: "relacionados",
-        item: id,
-        title: `Sinônimo autorizado (TR) adicionado: ${getTermNameForSummary(id)}`,
-        type: term.revisao,
-        typeLabel: reviewLabel(term.revisao)
-      });
-    });
-
-    removidos.forEach(id => {
-      changes.push({
-        id: `${term.id}::tr-remove::${id}`,
-        termId: term.id,
-        kind: "list-remove",
-        field: "relacionados",
-        item: id,
-        title: `Descritor autorizado relacionado sugerido para retirada: ${getTermNameForSummary(id)}`,
-        type: term.revisao,
-        typeLabel: reviewLabel(term.revisao)
-      });
-    });
-  }
-
-  if (!sameList(original.relacionadosNaoAutorizados, term.relacionadosNaoAutorizados)) {
-    const adicionados = listAddedItems(original.relacionadosNaoAutorizados, term.relacionadosNaoAutorizados);
-    const removidos = listRemovedItems(original.relacionadosNaoAutorizados, term.relacionadosNaoAutorizados);
-
-    adicionados.forEach(value => {
-      changes.push({
-        id: `${term.id}::up-add::${value}`,
-        termId: term.id,
-        kind: "list-add",
-        field: "relacionadosNaoAutorizados",
-        item: value,
-        title: `Termo não autorizado (UP) adicionado: ${value}`,
-        type: term.revisao,
-        typeLabel: reviewLabel(term.revisao)
-      });
-    });
-
-    removidos.forEach(value => {
-      changes.push({
-        id: `${term.id}::up-remove::${value}`,
-        termId: term.id,
-        kind: "list-remove",
-        field: "relacionadosNaoAutorizados",
-        item: value,
-        title: `Termo não autorizado (UP) sugerido para retirada: ${value}`,
-        type: term.revisao,
-        typeLabel: reviewLabel(term.revisao)
-      });
-    });
-  }
 
   return changes;
 }
@@ -3676,8 +3742,25 @@ return true;
           const before = snapshotTerm(term);
 
           const novoTermo = document.getElementById("editTermo").value.trim() || term.termo;
+          const novaDefinicao = document.getElementById("editDefinicao").value.trim();
+          const novaNotaEscopo = document.getElementById("editNotaEscopo").value.trim();
+          const novaNotaUso = document.getElementById("editNotaUso").value.trim();
+          const novoParentId = document.getElementById("editParent").value || null;
+
+          const changed =
+            novoTermo !== term.termo ||
+            novaDefinicao !== term.definicao ||
+            novaNotaEscopo !== term.notaEscopo ||
+            novaNotaUso !== term.notaUso ||
+            novoParentId !== term.parentId;
+
+          if (changed && term.revisao !== REVIEW_NOVO && term.revisao !== REVIEW_EXCLUIR && !term.original) {
+            term.original = before;
+          }
 
           if (novoTermo !== term.termo) {
+            registerPendingFieldChange(term, "termo", before.termo, novoTermo);
+
             if (!term.termoAnterior && term.revisao !== REVIEW_NOVO) {
               term.termoAnterior = term.termo;
             }
@@ -3685,17 +3768,27 @@ return true;
             term.termo = novoTermo;
           }
 
-          term.definicao = document.getElementById("editDefinicao").value.trim();
-          term.notaEscopo = document.getElementById("editNotaEscopo").value.trim();
-          term.notaUso = document.getElementById("editNotaUso").value.trim();
-          term.parentId = document.getElementById("editParent").value || null;
+          if (novaDefinicao !== term.definicao) {
+            registerPendingFieldChange(term, "definicao", before.definicao, novaDefinicao);
+            term.definicao = novaDefinicao;
+          }
 
-          const changed = JSON.stringify(before) !== JSON.stringify(snapshotTerm(term));
+          if (novaNotaEscopo !== term.notaEscopo) {
+            registerPendingFieldChange(term, "notaEscopo", before.notaEscopo, novaNotaEscopo);
+            term.notaEscopo = novaNotaEscopo;
+          }
+
+          if (novaNotaUso !== term.notaUso) {
+            registerPendingFieldChange(term, "notaUso", before.notaUso, novaNotaUso);
+            term.notaUso = novaNotaUso;
+          }
+
+          if (novoParentId !== term.parentId) {
+            registerPendingFieldChange(term, "parentId", before.parentId, novoParentId);
+            term.parentId = novoParentId;
+          }
 
           if (changed) {
-            if (term.revisao !== REVIEW_NOVO && term.revisao !== REVIEW_EXCLUIR && !term.original) {
-              term.original = before;
-            }
             markModified(term);
           }
 
@@ -3710,30 +3803,6 @@ return true;
           await saveState();
           render();
         };
-      }
-      const suggestDeleteBtn = document.getElementById("suggestDeleteBtn");
-      if (suggestDeleteBtn) {
-        suggestDeleteBtn.onclick = async () => {
-          if (term.revisao === REVIEW_EXCLUIR) {
-            clearReview(term);
-          } else {
-            ensureOriginal(term);
-            term.revisao = REVIEW_EXCLUIR;
-            registerReviewMetadata(term);
-          }
-          await saveState();
-          render();
-        };
-      }
-
-      const clearReviewBtn = document.getElementById("clearReviewBtn");
-      if (clearReviewBtn) {
-        clearReviewBtn.onclick = async () => {
-          clearReview(term);
-          await saveState();
-          render();
-        };
-      }
 
             termArea.querySelectorAll("[data-rel-action]").forEach(btn => {
               btn.onclick = async () => {
@@ -4059,19 +4128,16 @@ async function approvePendingChange(changeId) {
   registrarDecisaoMudanca(term, change, "aprovada");
 
   if (change.kind === "field" || change.kind === "parent") {
-    term.original[change.field] = term[change.field] || null;
+    applyRawValueToTerm(term, change.field, change.suggestedRaw);
+
+    term.original[change.field] = cloneRawValue(change.suggestedRaw);
 
     if (change.field === "termo") {
       term.termoAnterior = "";
     }
-  }
 
-  if (change.kind === "list-add") {
-    term.original[change.field] = addUniqueValue(term.original[change.field], change.item);
-  }
-
-  if (change.kind === "list-remove") {
-    term.original[change.field] = removeValue(term.original[change.field], change.item);
+    // Sugestões concorrentes no mesmo campo são encerradas.
+    removePendingChangesForField(term, change.field);
   }
 
   refreshReviewAfterSingleChange(term);
@@ -4084,58 +4150,58 @@ async function approvePendingChange(changeId) {
   }
 }
 
-async function rejectPendingChange(changeId) {
-  if (!userCanAccessManagement()) {
-    alert("Você não tem permissão para rejeitar ações.");
-    return;
-  }
+    async function rejectPendingChange(changeId) {
+          if (!userCanAccessManagement()) {
+            alert("Você não tem permissão para rejeitar ações.");
+            return;
+          }
 
-  const change = findPendingChangeById(changeId);
-  if (!change) return;
+          const change = findPendingChangeById(changeId);
+          if (!change) return;
 
-  const term = getTerm(change.termId);
-  if (!term) return;
+          const term = getTerm(change.termId);
+          if (!term) return;
 
-  if (change.kind === "whole-new" || change.kind === "whole-delete") {
-      await rejectPending(term.id);
-      return;
-    }
+          if (change.kind === "whole-new" || change.kind === "whole-delete") {
+            await rejectPending(term.id);
+            return;
+          }
 
-    if (!term.original) return;
+          if (!term.original) return;
 
-    const justificativa = pedirJustificativaRejeicao();
+          const justificativa = pedirJustificativaRejeicao();
 
-    if (justificativa === null) {
-      return;
-    }
+          if (justificativa === null) {
+            return;
+          }
 
-registrarDecisaoMudanca(term, change, "rejeitada", justificativa);
+          registrarDecisaoMudanca(term, change, "rejeitada", justificativa);
 
-  if (change.kind === "field" || change.kind === "parent") {
-    term[change.field] = term.original[change.field] || null;
+          if (change.kind === "field" || change.kind === "parent") {
+            removePendingChangeById(term, change.id);
 
-    if (change.field === "termo") {
-      term.termoAnterior = "";
-    }
-  }
+            const latestSameField = latestPendingChangeForField(term, change.field);
 
-  if (change.kind === "list-add") {
-    term[change.field] = removeValue(term[change.field], change.item);
-  }
+            if (latestSameField) {
+              applyRawValueToTerm(term, change.field, latestSameField.suggestedRaw);
+            } else {
+              applyRawValueToTerm(term, change.field, term.original[change.field]);
 
-  if (change.kind === "list-remove") {
-    term[change.field] = addUniqueValue(term[change.field], change.item);
-  }
+              if (change.field === "termo") {
+                term.termoAnterior = "";
+              }
+            }
+          }
 
-  refreshReviewAfterSingleChange(term);
+          refreshReviewAfterSingleChange(term);
 
-  await saveState();
-  render();
+          await saveState();
+          render();
 
-  if (!reviewMode) {
-    setActiveTab("pendencias");
-  }
-}
+          if (!reviewMode) {
+            setActiveTab("pendencias");
+          }
+        }
 
     async function approvePending(termId) {
 
