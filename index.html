@@ -4539,11 +4539,10 @@ removeTermCompletely(term.id);
 
     async function importarIcmgGithubSeNecessario() {
       try {
-        if (
-          state.icmgSourceVersion === ICMG_IMPORT_VERSION &&
-          Array.isArray(state.terms) &&
-          state.terms.length
-        ) {
+        // REGRA DE SEGURANÇA:
+        // Se já existe estrutura carregada do Supabase, nunca substitui automaticamente.
+        // Importação automática só deve acontecer quando não houver nenhum termo salvo.
+        if (Array.isArray(state.terms) && state.terms.length > 0) {
           return false;
         }
 
@@ -4556,8 +4555,6 @@ removeTermCompletely(term.id);
           throw new Error("Nenhum termo autorizado foi identificado no ICMG.txt.");
         }
 
-        const idsValidos = new Set(termos.map(term => term.id));
-
         const rootIds = termos
           .filter(term => term.parentId === null)
           .map(term => term.id);
@@ -4566,7 +4563,10 @@ removeTermCompletely(term.id);
           selectedId: null,
           expanded: rootIds,
           terms: termos,
-          comments: []
+          comments: [],
+          actionHistory: [],
+          icmgSourceVersion: ICMG_IMPORT_VERSION,
+          icmgSourceImportedAt: nowLabel()
         });
 
         reviewMode = false;
@@ -4582,7 +4582,7 @@ removeTermCompletely(term.id);
         return false;
       }
     }
-
+    
     function safePdfText(value) {
       return String(value ?? "")
         .replaceAll("→", "->")
