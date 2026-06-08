@@ -1449,8 +1449,25 @@ function userCanAccessManagement() {
             : []
         } : null,
         revisaoPor: term.revisaoPor || "",
-        revisaoEm: term.revisaoEm || ""
-      }));
+        revisaoEm: term.revisaoEm || "",
+        pendingChanges: Array.isArray(term.pendingChanges)
+          ? term.pendingChanges.map(change => ({
+              id: String(change.id || uid("change")),
+              termId: change.termId ? String(change.termId) : String(term.id || ""),
+              kind: change.kind || "field",
+              field: change.field || "",
+              title: change.title || "",
+              currentValue: change.currentValue || "",
+              suggestedValue: change.suggestedValue || "",
+              currentRaw: change.currentRaw !== undefined ? change.currentRaw : change.currentValue || "",
+              suggestedRaw: change.suggestedRaw !== undefined ? change.suggestedRaw : change.suggestedValue || "",
+              type: change.type || REVIEW_MODIFICADO,
+              typeLabel: change.typeLabel || reviewLabel(change.type || REVIEW_MODIFICADO),
+              author: change.author || "Usuário",
+              createdAt: change.createdAt || "",
+              createdAtMs: Number(change.createdAtMs || 0)
+            }))
+          : []
 
       if (
         parsed.selectedId === null ||
@@ -1634,6 +1651,133 @@ function userCanAccessManagement() {
           : []
       };
     }
+
+    function cloneRawValue(value) {
+          if (Array.isArray(value)) return [...value];
+          if (value === undefined || value === null) return null;
+          return String(value);
+        }
+
+        function sameRawValue(a, b) {
+          return JSON.stringify(cloneRawValue(a)) === JSON.stringify(cloneRawValue(b));
+        }
+
+        function fieldTitleForPending(field) {
+          const titles = {
+            termo: "Nome alterado",
+            parentId: "Termo geral alterado",
+            definicao: "Definição alterada",
+            notaEscopo: "Nota Explicativa alterada",
+            notaUso: "Nota Histórica alterada"
+          };
+
+          return titles[field] || "Alteração registrada";
+        }
+
+        function displayValueForPending(field, value) {
+          if (field === "parentId") {
+            return getTermNameForSummary(value);
+          }
+
+          if (Array.isArray(value)) {
+            return value.join("; ");
+          }
+
+          return String(value || "");
+        }
+
+        function registerPendingFieldChange(term, field, beforeValue, suggestedValue) {
+          if (!term) return;
+
+          // Termo novo já aparece como pendência integral.
+          // Exclusão sugerida também não precisa gerar alteração de campo.
+          if (term.revisao === REVIEW_NOVO || term.revisao === REVIEW_EXCLUIR) {
+            return;
+          }
+
+          term.pendingChanges = Array.isArray(term.pendingChanges) ? term.pendingChanges : [];
+
+          const originalRaw = term.original && Object.prototype.hasOwnProperty.call(term.original, field)
+            ? cloneRawValue(term.original[field])
+            : cloneRawValue(beforeValue);
+
+          const suggestedRaw = cloneRawValue(suggestedValue);
+
+          const currentValue = displayValueForPending(field, originalRaw).trim();
+          const suggestedDisplay = displayValueForPending(field, suggestedRaw).trim();
+
+          if (currentValue === suggestedDisplay) {
+            return;
+          }
+
+          const alreadyExists = term.pendingChanges.some(change =>
+            change.field === field &&
+            sameRawValue(change.currentRaw, originalRaw) &&
+            sameRawValue(change.suggestedRaw, suggestedRaw)
+          );
+
+          if (alreadyExists) {
+            return;
+          }
+
+          term.pendingChanges.push({
+            id: uid("change"),
+            termId: term.id,
+            kind: field === "parentId" ? "parent" : "field",
+            field,
+            title: fieldTitleForPending(field),
+            currentValue: currentValue || "—",
+            suggestedValue: suggestedDisplay || "—",
+            currentRaw: originalRaw,
+            suggestedRaw,
+            type: REVIEW_MODIFICADO,
+            typeLabel: reviewLabel(REVIEW_MODIFICADO),
+            author: currentUser.value.trim() || "Usuário",
+            createdAt: nowLabel(),
+            createdAtMs: Date.now()
+          });
+        }
+
+        function removePendingChangeById(term, changeId) {
+          if (!term || !Array.isArray(term.pendingChanges)) return;
+
+          term.pendingChanges = term.pendingChanges.filter(change => change.id !== changeId);
+        }
+
+        function removePendingChangesForField(term, field) {
+          if (!term || !Array.isArray(term.pendingChanges)) return;
+
+          term.pendingChanges = term.pendingChanges.filter(change => change.field !== field);
+        }
+
+        function latestPendingChangeForField(term, field) {
+          const changes = Array.isArray(term?.pendingChanges)
+            ? term.pendingChanges.filter(change => change.field === field)
+            : [];
+
+          if (!changes.length) return null;
+
+          return changes
+            .slice()
+            .sort((a, b) => Number(a.createdAtMs || 0) - Number(b.createdAtMs || 0))
+            .at(-1);
+        }
+
+        function applyRawValueToTerm(term, field, value) {
+          if (!term) return;
+
+          if (field === "parentId") {
+            term.parentId = value || null;
+            return;
+          }
+
+          if (field === "relacionados" || field === "relacionadosNaoAutorizados") {
+            term[field] = Array.isArray(value) ? [...value] : [];
+            return;
+          }
+
+          term[field] = value === null || value === undefined ? "" : String(value);
+        }
 
     function registerReviewMetadata(term) {
       term.revisaoPor = currentUser.value.trim() || "Usuário";
