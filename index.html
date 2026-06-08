@@ -5454,7 +5454,9 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
       state = await loadState();
       state = normalizeState(state);
 
-      const atualizadoPeloTxt = await importarIcmgGithubSeNecessario();
+      const atualizadoPeloTxt = false;
+        // Importação automática desativada para evitar substituição acidental da base.
+        // Para recarregar a estrutura, usar apenas os botões de importação manual.
 
       // Ao abrir o app, não mostra automaticamente o último termo salvo.
       state.selectedId = null;
