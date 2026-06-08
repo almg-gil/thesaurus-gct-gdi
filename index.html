@@ -1468,7 +1468,7 @@ function userCanAccessManagement() {
               createdAtMs: Number(change.createdAtMs || 0)
             }))
           : []
-
+        }));
       if (
         parsed.selectedId === null ||
         parsed.selectedId === undefined ||
@@ -3803,6 +3803,7 @@ return true;
           await saveState();
           render();
         };
+        }  
 
             termArea.querySelectorAll("[data-rel-action]").forEach(btn => {
               btn.onclick = async () => {
