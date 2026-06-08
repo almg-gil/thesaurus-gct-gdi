@@ -1312,19 +1312,40 @@ function userCanAccessManagement() {
         .from("app_state")
         .select("payload")
         .eq("id", "tesauro")
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error(error);
         alert(`Não foi possível carregar os dados do Supabase.
 
-Detalhe: ${error.message || JSON.stringify(error)}
+    Detalhe: ${error.message || JSON.stringify(error)}
 
-O app usará os dados de exemplo.`);
-        return structuredClone(exemplo);
+    A estrutura salva não será substituída. Verifique conexão, permissões/RLS e a tabela app_state.`);
+    
+        return normalizeState({
+          selectedId: null,
+          expanded: [],
+          terms: [],
+          comments: [],
+          actionHistory: []
+        });
       }
 
-      const loaded = normalizeState(data?.payload);
+      if (!data || !data.payload) {
+        alert(`Nenhum registro foi encontrado em app_state com id = "tesauro".
+
+    O app abrirá vazio para evitar substituir dados por engano.`);
+    
+        return normalizeState({
+          selectedId: null,
+          expanded: [],
+          terms: [],
+          comments: [],
+          actionHistory: []
+        });
+      }
+
+      const loaded = normalizeState(data.payload);
       loaded.selectedId = null;
       return loaded;
     }
