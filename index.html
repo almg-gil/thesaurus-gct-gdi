@@ -1,4 +1,4 @@
-  <!doctype html>
+    <!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
@@ -917,7 +917,10 @@
 
       <div class="toolbar" style="margin-bottom: 8px;">
         <button id="collapseToClassesBtn">Recolher para classes</button>
+        <button id="downloadTreeTxtBtn">Baixar estrutura completa</button>
       </div>
+
+      
 
       <div id="tree" class="tree-box"></div>
 
@@ -1080,6 +1083,7 @@
     const LAYOUT_KEY = "tesauro_left_width";
     const clearSearchBtn = document.getElementById("clearSearchBtn");
     const collapseToClassesBtn = document.getElementById("collapseToClassesBtn");
+    const downloadTreeTxtBtn = document.getElementById("downloadTreeTxtBtn");
     const termArea = document.getElementById("termArea");
     const newTerm = document.getElementById("newTerm");
     const newParent = document.getElementById("newParent");
@@ -4131,6 +4135,58 @@ removeTermCompletely(term.id);
       URL.revokeObjectURL(url);
     }
 
+    function appendTreeTxtLines(term, level, lines) {
+      const indent = "  ".repeat(level);
+      const status = term.revisao && term.revisao !== REVIEW_ORIGINAL
+        ? ` [${reviewLabel(term.revisao)}]`
+        : "";
+
+      lines.push(`${indent}- ${displayTermName(term)}${status}`);
+
+      childrenOf(term.id).forEach(child => {
+        appendTreeTxtLines(child, level + 1, lines);
+      });
+    }
+
+    function downloadCompleteTreeTxt() {
+      state = normalizeState(state);
+      buildIndexes();
+
+      const lines = [];
+
+      lines.push("Estrutura completa - Thesaurus GCT-GDI");
+      lines.push(`Gerado por: ${currentUser.value.trim() || "Usuário"}`);
+      lines.push(`Gerado em: ${formatDateTimeBr(nowLabel())}`);
+      lines.push(`Total de termos: ${state.terms.length}`);
+      lines.push("");
+
+      const roots = childrenOf(null);
+
+      if (!roots.length) {
+        lines.push("Nenhum termo cadastrado.");
+      } else {
+        roots.forEach(root => {
+          appendTreeTxtLines(root, 0, lines);
+        });
+      }
+
+      const text = lines.join("\r\n");
+
+      // BOM no início ajuda o Windows/Bloco de Notas a reconhecer UTF-8 com acentos.
+      const blob = new Blob(["\ufeff" + text], {
+        type: "text/plain;charset=utf-8"
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+
+      a.href = url;
+      a.download = `estrutura-completa-tesauro-${new Date().toISOString().slice(0, 10)}.txt`;
+      a.click();
+
+      URL.revokeObjectURL(url);
+    }
+
     function importJson(file) {
       const reader = new FileReader();
       reader.onload = async () => {
@@ -5151,6 +5207,7 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
     });
 
     collapseToClassesBtn.addEventListener("click", collapseTreeToClasses);
+    downloadTreeTxtBtn.addEventListener("click", downloadCompleteTreeTxt);
     searchInput.addEventListener("input", renderTree);
     clearSearchBtn.addEventListener("click", () => {
       searchInput.value = "";
