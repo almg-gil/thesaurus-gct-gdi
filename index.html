@@ -4489,11 +4489,12 @@ removeTermCompletely(term.id);
             .map(term => term.id);
 
           state = normalizeState({
-            selectedId: null,
-            expanded: rootIds,
+            selectedId: termos[0]?.id || null,
+            expanded: [],
             terms: termos,
             comments: [],
-            icmgSourceVersion: ICMG_IMPORT_VERSION,
+            actionHistory: [],
+            icmgSourceVersion: "almg-api",
             icmgSourceImportedAt: nowLabel()
           });
 
