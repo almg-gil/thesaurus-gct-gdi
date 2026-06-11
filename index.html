@@ -852,6 +852,8 @@
           width: 100%;
           text-align: left;
           background: #fff;
+          font-size: 14px;
+          padding: 6px 8px;
         }
 
         .multi-select-menu {
@@ -868,9 +870,12 @@
         }
 
         .multi-select-menu label {
-          display: block;
-          padding: 5px 4px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 6px;
           cursor: pointer;
+          font-size: 14px;
         }
 
         .multi-select-menu label:hover {
@@ -879,6 +884,11 @@
 
         .multi-select-menu.hidden {
           display: none;
+        }
+        .multi-select-menu input[type="checkbox"] {
+          width: auto;
+          margin: 0;
+          flex: 0 0 auto;
         }
   </style>
 </head>
@@ -2847,7 +2857,12 @@ function renderOriginalSummary(term) {
 
           function renderTipos() {
             const categoriasMarcadas = selecionados(".silegis-categoria");
-            const tipos = categoriasMarcadas.flatMap(cat => tiposPorCategoria[cat] || []);
+
+            const categoriasParaTipos = categoriasMarcadas.length
+              ? categoriasMarcadas
+              : Object.keys(tiposPorCategoria);
+
+            const tipos = categoriasParaTipos.flatMap(cat => tiposPorCategoria[cat] || []);
 
             atualizarTextoBotao(
               "categoriaDropdown",
