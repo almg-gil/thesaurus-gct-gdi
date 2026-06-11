@@ -2699,7 +2699,7 @@ function renderOriginalSummary(term) {
           return `https://silegis.almg.gov.br/silegismg/#/processos?sintaxe=LUCENE_EXTENDIDO&pesquisa=${encodeURIComponent(query)}`;
         }
 
-        function renderSilegisSearchArea() {
+    function renderSilegisSearchArea() {
           reviewMode = false;
           state.selectedId = null;
 
@@ -2708,30 +2708,30 @@ function renderOriginalSummary(term) {
           termArea.innerHTML = `
             <div class="term-header">
               <h1>Pesquisa no Silegis</h1>
-              <div class="muted">Monte a consulta selecionando o tipo e a situação de tramitação.</div>
+              <div class="muted">Selecione uma ou mais opções para montar a pesquisa.</div>
             </div>
 
             <div class="relation-box">
               <div class="form-grid">
                 <div class="field">
-                  <label>Categoria</label>
-                  <select id="silegisCategoria">
-                    <option value="proposicao">Proposição</option>
-                    <option value="requerimento">Requerimento</option>
-                  </select>
+                  <strong>Categoria</strong><br>
+                  <label><input type="checkbox" class="silegis-categoria" value="proposicao"> Proposição</label><br>
+                  <label><input type="checkbox" class="silegis-categoria" value="requerimento"> Requerimento</label><br>
+                  <label><input type="checkbox" id="silegisTodasCategorias"> Selecionar todos</label>
                 </div>
 
                 <div class="field">
-                  <label>Tipo</label>
-                  <select id="silegisTipo"></select>
+                  <strong>Tipo</strong>
+                  <div id="silegisTiposBox" class="muted" style="margin-top: 6px;">
+                    Selecione uma categoria.
+                  </div>
                 </div>
 
                 <div class="field">
-                  <label>Em tramitação</label>
-                  <select id="silegisTramitacao">
-                    <option value="True">Sim</option>
-                    <option value="False">Não</option>
-                  </select>
+                  <strong>Em tramitação</strong><br>
+                  <label><input type="checkbox" class="silegis-tramitacao" value="True"> Sim</label><br>
+                  <label><input type="checkbox" class="silegis-tramitacao" value="False"> Não</label><br>
+                  <label><input type="checkbox" id="silegisTodasTramitacoes"> Selecionar todos</label>
                 </div>
 
                 <div class="field full">
@@ -2750,47 +2750,133 @@ function renderOriginalSummary(term) {
           wireSilegisSearchArea();
         }
 
-function wireSilegisSearchArea() {
-  const categoria = document.getElementById("silegisCategoria");
-  const tipo = document.getElementById("silegisTipo");
-  const tramitacao = document.getElementById("silegisTramitacao");
-  const link = document.getElementById("silegisLink");
-  const pesquisarBtn = document.getElementById("silegisPesquisarBtn");
-  const voltarBtn = document.getElementById("voltarHierarquiaBtn");
+    function wireSilegisSearchArea() {
+          const tiposPorCategoria = {
+            proposicao: ["PL", "PEC", "PLC", "PRE"],
+            requerimento: ["RQN", "RQC"]
+          };
 
-  const tipos = {
-    proposicao: ["PL", "PEC", "PLC", "PRE"],
-    requerimento: ["RQN", "RQC"]
-  };
+          const categorias = [...document.querySelectorAll(".silegis-categoria")];
+          const todasCategorias = document.getElementById("silegisTodasCategorias");
+          const tiposBox = document.getElementById("silegisTiposBox");
 
-  function atualizarTipos() {
-    tipo.innerHTML = tipos[categoria.value]
-      .map(t => `<option value="${t}">${t}</option>`)
-      .join("");
+          const tramitacoes = [...document.querySelectorAll(".silegis-tramitacao")];
+          const todasTramitacoes = document.getElementById("silegisTodasTramitacoes");
 
-    atualizarLink();
-  }
+          const link = document.getElementById("silegisLink");
+          const pesquisarBtn = document.getElementById("silegisPesquisarBtn");
+          const voltarBtn = document.getElementById("voltarHierarquiaBtn");
 
-  function atualizarLink() {
-    link.value = montarLinkSilegis(tipo.value, tramitacao.value);
-  }
+          function selecionados(selector) {
+            return [...document.querySelectorAll(selector)]
+              .filter(input => input.checked)
+              .map(input => input.value);
+          }
 
-  categoria.onchange = atualizarTipos;
-  tipo.onchange = atualizarLink;
-  tramitacao.onchange = atualizarLink;
+          function renderTipos() {
+            const categoriasMarcadas = selecionados(".silegis-categoria");
+            const tipos = categoriasMarcadas.flatMap(cat => tiposPorCategoria[cat] || []);
 
-  pesquisarBtn.onclick = () => {
-    window.open(link.value, "_blank", "noopener,noreferrer");
-  };
+            if (!tipos.length) {
+              tiposBox.innerHTML = '<span class="muted">Selecione uma categoria.</span>';
+              atualizarLink();
+              return;
+            }
 
-  voltarBtn.onclick = () => {
-    state.selectedId = null;
-    render();
-  };
+            tiposBox.innerHTML = `
+              ${tipos.map(tipo => `
+                <label>
+                  <input type="checkbox" class="silegis-tipo" value="${tipo}">
+                  ${tipo}
+                </label><br>
+              `).join("")}
+              <label>
+                <input type="checkbox" id="silegisTodosTipos">
+                Selecionar todos
+              </label>
+            `;
 
-  atualizarTipos();
-}
+            document.querySelectorAll(".silegis-tipo").forEach(input => {
+              input.onchange = atualizarLink;
+            });
 
+            const todosTipos = document.getElementById("silegisTodosTipos");
+            todosTipos.onchange = () => {
+              document.querySelectorAll(".silegis-tipo").forEach(input => {
+                input.checked = todosTipos.checked;
+              });
+    
+              atualizarLink();
+            };
+
+            atualizarLink();
+          }
+
+          function atualizarLink() {
+            const tipos = selecionados(".silegis-tipo");
+            const tram = selecionados(".silegis-tramitacao");
+
+            if (!tipos.length || !tram.length) {
+              link.value = "";
+              return;
+            }
+
+            const filtrosTipo = tipos
+              .map(tipo => `identificadorProposicao.proposicaoTipo: "${tipo}."`)
+              .join(" or ");
+
+            const filtrosTramitacao = tram
+              .map(valor => `emTramitacao: ${valor}`)
+              .join(" or ");
+
+            const query = `(${filtrosTipo}) and (${filtrosTramitacao})`;
+
+            link.value =
+              `https://silegis.almg.gov.br/silegismg/#/processos?sintaxe=LUCENE_EXTENDIDO&pesquisa=${encodeURIComponent(query)}`;
+          }
+
+          categorias.forEach(input => {
+            input.onchange = () => {
+              renderTipos();
+            };
+          });
+
+          todasCategorias.onchange = () => {
+            categorias.forEach(input => {
+              input.checked = todasCategorias.checked;
+            });
+
+            renderTipos();
+          };
+
+          tramitacoes.forEach(input => {
+            input.onchange = atualizarLink;
+          });
+
+          todasTramitacoes.onchange = () => {
+            tramitacoes.forEach(input => {
+              input.checked = todasTramitacoes.checked;
+            });
+
+            atualizarLink();
+          };
+
+          pesquisarBtn.onclick = () => {
+            if (!link.value) {
+              alert("Selecione pelo menos um tipo e uma situação de tramitação.");
+              return;
+            }
+
+            window.open(link.value, "_blank", "noopener,noreferrer");
+          };
+
+          voltarBtn.onclick = () => {
+            state.selectedId = null;
+            render();
+          };
+
+          renderTipos();
+        }
     function hasMatchingDescendant(term, query) {
       if (!query) return true;
       if (matchesTerm(term, query)) return true;
