@@ -918,6 +918,7 @@
       <div class="toolbar" style="margin-bottom: 8px;">
         <button id="collapseToClassesBtn">Recolher para classes</button>
         <button id="downloadTreeTxtBtn">Baixar estrutura completa</button>
+        <button id="silegisSearchBtn">Pesquisa no Silegis</button>
       </div>
 
       
@@ -1085,6 +1086,7 @@
     const clearSearchBtn = document.getElementById("clearSearchBtn");
     const collapseToClassesBtn = document.getElementById("collapseToClassesBtn");
     const downloadTreeTxtBtn = document.getElementById("downloadTreeTxtBtn");
+    const silegisSearchBtn = document.getElementById("silegisSearchBtn")
     const termArea = document.getElementById("termArea");
     const newTerm = document.getElementById("newTerm");
     const newParent = document.getElementById("newParent");
@@ -2691,6 +2693,103 @@ function renderOriginalSummary(term) {
         pronunciamentos: `https://www.almg.gov.br/atividade-parlamentar/plenario/pronunciamentos?tag=${tag}`
       };
     }
+
+    function montarLinkSilegis(tipo, emTramitacao) {
+          const query = `identificadorProposicao.proposicaoTipo: "${tipo}." and emTramitacao: ${emTramitacao}`;
+          return `https://silegis.almg.gov.br/silegismg/#/processos?sintaxe=LUCENE_EXTENDIDO&pesquisa=${encodeURIComponent(query)}`;
+        }
+
+        function renderSilegisSearchArea() {
+          reviewMode = false;
+          state.selectedId = null;
+
+          treeEl.innerHTML = "";
+
+          termArea.innerHTML = `
+            <div class="term-header">
+              <h1>Pesquisa no Silegis</h1>
+              <div class="muted">Monte a consulta selecionando o tipo e a situação de tramitação.</div>
+            </div>
+
+            <div class="relation-box">
+              <div class="form-grid">
+                <div class="field">
+                  <label>Categoria</label>
+                  <select id="silegisCategoria">
+                    <option value="proposicao">Proposição</option>
+                    <option value="requerimento">Requerimento</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label>Tipo</label>
+                  <select id="silegisTipo"></select>
+                </div>
+
+                <div class="field">
+                  <label>Em tramitação</label>
+                  <select id="silegisTramitacao">
+                    <option value="True">Sim</option>
+                    <option value="False">Não</option>
+                  </select>
+                </div>
+
+                <div class="field full">
+                  <label>Link gerado</label>
+                  <input id="silegisLink" readonly />
+                </div>
+              </div>
+
+              <div class="toolbar">
+                <button id="silegisPesquisarBtn" class="primary">Pesquisar</button>
+                <button id="voltarHierarquiaBtn">Voltar para hierarquia</button>
+              </div>
+            </div>
+          `;
+
+          wireSilegisSearchArea();
+        }
+
+function wireSilegisSearchArea() {
+  const categoria = document.getElementById("silegisCategoria");
+  const tipo = document.getElementById("silegisTipo");
+  const tramitacao = document.getElementById("silegisTramitacao");
+  const link = document.getElementById("silegisLink");
+  const pesquisarBtn = document.getElementById("silegisPesquisarBtn");
+  const voltarBtn = document.getElementById("voltarHierarquiaBtn");
+
+  const tipos = {
+    proposicao: ["PL", "PEC", "PLC", "PRE"],
+    requerimento: ["RQN", "RQC"]
+  };
+
+  function atualizarTipos() {
+    tipo.innerHTML = tipos[categoria.value]
+      .map(t => `<option value="${t}">${t}</option>`)
+      .join("");
+
+    atualizarLink();
+  }
+
+  function atualizarLink() {
+    link.value = montarLinkSilegis(tipo.value, tramitacao.value);
+  }
+
+  categoria.onchange = atualizarTipos;
+  tipo.onchange = atualizarLink;
+  tramitacao.onchange = atualizarLink;
+
+  pesquisarBtn.onclick = () => {
+    window.open(link.value, "_blank", "noopener,noreferrer");
+  };
+
+  voltarBtn.onclick = () => {
+    state.selectedId = null;
+    render();
+  };
+
+  atualizarTipos();
+}
 
     function hasMatchingDescendant(term, query) {
       if (!query) return true;
@@ -5420,6 +5519,7 @@ Se aparecer erro de CORS no console do navegador, a importação direta pelo Git
 
     collapseToClassesBtn.addEventListener("click", collapseTreeToClasses);
     downloadTreeTxtBtn.addEventListener("click", downloadCompleteTreeTxt);
+    silegisSearchBtn.addEventListener("click", renderSilegisSearchArea);
     searchInput.addEventListener("input", renderTree);
     clearSearchBtn.addEventListener("click", () => {
       searchInput.value = "";
