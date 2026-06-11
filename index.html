@@ -844,6 +844,42 @@
       }
       .form-grid { grid-template-columns: 1fr; }
     }
+      .multi-select {
+          position: relative;
+        }
+
+        .multi-select-btn {
+          width: 100%;
+          text-align: left;
+          background: #fff;
+        }
+
+        .multi-select-menu {
+          position: absolute;
+          z-index: 100;
+          left: 0;
+          right: 0;
+          top: calc(100% + 2px);
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          background: #fff;
+          padding: 8px;
+          box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+        }
+
+        .multi-select-menu label {
+          display: block;
+          padding: 5px 4px;
+          cursor: pointer;
+        }
+
+        .multi-select-menu label:hover {
+          background: var(--selected);
+        }
+
+        .multi-select-menu.hidden {
+          display: none;
+        }
   </style>
 </head>
 <body class="logged-out">
