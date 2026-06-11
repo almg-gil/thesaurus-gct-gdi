@@ -2920,38 +2920,58 @@ function renderOriginalSummary(term) {
           }
 
           function montarLinkPesquisaSilegis() {
-            const tipos = selecionados(".silegis-tipo");
-            const tram = selecionados(".silegis-tramitacao");
-            const texto = document.getElementById("silegisTexto")?.value.trim();
+              const categorias = selecionados(".silegis-categoria");
+              let tipos = selecionados(".silegis-tipo");
+              const tram = selecionados(".silegis-tramitacao");
+              const texto = document.getElementById("silegisTexto")?.value.trim();
 
-            const filtros = [];
+              const filtros = [];
 
-            if (tipos.length) {
-              filtros.push(
-                `(${tipos
-                  .map(tipo => `identificadorProposicao.proposicaoTipo: "${valorTipoSilegis(tipo)}"`)
-                  .join(" or ")})`
-              );
+              if (!tipos.length && categorias.length) {
+                tipos = categorias.flatMap(cat => tiposPorCategoria[cat] || []);
+              }
+
+              if (tram.length) {
+                filtros.push(
+                  `(${tram
+                    .map(valor => `emTramitacao: ${valor}`)
+                    .join(" or ")})`
+                );
+              }
+
+              if (texto) {
+                filtros.push(`textos.conteudo: "${texto}"`);
+              }
+
+              if (tipos.length) {
+                const somenteProposicao =
+                  categorias.length === 1 &&
+                  categorias[0] === "proposicao" &&
+                  tipos.includes("PL") &&
+                  tipos.includes("PEC") &&
+                  tipos.includes("PRE") &&
+                  tipos.includes("PLC") &&
+                  tipos.length === 4;
+
+                if (somenteProposicao) {
+                  filtros.push(
+                    `identificadorProposicao.proposicaoTipo: "[PL.; PEC; PRE; PLC]"`
+                  );
+                } else {
+                  filtros.push(
+                    `(${tipos
+                      .map(tipo => `identificadorProposicao.proposicaoTipo: "${valorTipoSilegis(tipo)}"`)
+                      .join(" or ")})`
+                  );
+                }
+              }
+
+              if (!filtros.length) return "";
+
+              const query = filtros.join(" and ");
+
+              return `https://silegis.almg.gov.br/silegismg/#/processos?sintaxe=LUCENE_EXTENDIDO&pesquisa=${encodeURIComponent(query).replace(/%20/g, "+")}`;
             }
-
-            if (tram.length) {
-              filtros.push(
-                `(${tram
-                  .map(valor => `emTramitacao: ${valor}`)
-                  .join(" or ")})`
-              );
-            }
-
-            if (texto) {
-              filtros.push(`textos.conteudo: "${texto}"`);
-            }
-
-            if (!filtros.length) return "";
-
-            const query = filtros.join(" and ");
-
-            return `https://silegis.almg.gov.br/silegismg/#/processos?sintaxe=LUCENE_EXTENDIDO&pesquisa=${encodeURIComponent(query).replace(/%20/g, "+")}`;
-          }
 
           document.querySelectorAll(".silegis-categoria").forEach(input => {
             input.onchange = renderTipos;
