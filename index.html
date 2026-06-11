@@ -2810,6 +2810,19 @@ function renderOriginalSummary(term) {
           wireSilegisSearchArea();
         }
 
+    function valorTipoSilegis(tipo) {
+          const mapa = {
+            PL: "PL.",
+            PEC: "PEC",
+            PLC: "PLC",
+            PRE: "PRE",
+            RQN: "RQN",
+            RQC: "RQC"
+          };
+
+          return mapa[tipo] || tipo;
+        }
+
     function wireSilegisSearchArea() {
           const tiposPorCategoria = {
             proposicao: ["PL", "PEC", "PLC", "PRE"],
@@ -2921,7 +2934,7 @@ function renderOriginalSummary(term) {
             }
 
             const filtrosTipo = tipos
-              .map(tipo => `identificadorProposicao.proposicaoTipo: "${tipo}."`)
+              .map(tipo => `identificadorProposicao.proposicaoTipo: "${valorTipoSilegis(tipo)}"`)
               .join(" or ");
 
             const filtrosTramitacao = tram
