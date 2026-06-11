@@ -2795,8 +2795,8 @@ function renderOriginalSummary(term) {
                 </div>
 
                 <div class="field full">
-                  <label>Link gerado</label>
-                  <input id="silegisLink" readonly />
+                  <label>Pesquisa textual</label>
+                  <input id="silegisTexto" type="text" placeholder="Ex.: educação ambiental" />
                 </div>
               </div>
 
@@ -2862,10 +2862,21 @@ function renderOriginalSummary(term) {
 
           function atualizarTextoBotao(dropdownId, textoPadrao, valores) {
             const btn = document.querySelector(`#${dropdownId} .multi-select-btn`);
-
             if (!btn) return;
-
             btn.textContent = valores.length ? valores.join(", ") : textoPadrao;
+          }
+
+          function atualizarEstadoPesquisa() {
+            const tipos = selecionados(".silegis-tipo");
+            const tram = selecionados(".silegis-tramitacao");
+
+            atualizarTextoBotao("tipoDropdown", "Selecionar tipo", tipos);
+
+            atualizarTextoBotao(
+              "tramitacaoDropdown",
+              "Selecionar tramitação",
+              tram.map(v => v === "True" ? "Sim" : "Não")
+            );
           }
 
           function renderTipos() {
@@ -2885,13 +2896,6 @@ function renderOriginalSummary(term) {
 
             const tiposBox = document.getElementById("silegisTiposBox");
 
-            if (!tipos.length) {
-              tiposBox.innerHTML = '<div class="muted">Selecione uma categoria.</div>';
-              atualizarTextoBotao("tipoDropdown", "Selecionar tipo", []);
-              atualizarLink();
-              return;
-            }
-
             tiposBox.innerHTML = `
               ${tipos.map(tipo => `
                 <label><input type="checkbox" class="silegis-tipo" value="${tipo}"> ${tipo}</label>
@@ -2901,7 +2905,7 @@ function renderOriginalSummary(term) {
             `;
 
             document.querySelectorAll(".silegis-tipo").forEach(input => {
-              input.onchange = atualizarLink;
+              input.onchange = atualizarEstadoPesquisa;
             });
 
             document.getElementById("silegisTodosTipos").onchange = event => {
@@ -2909,42 +2913,44 @@ function renderOriginalSummary(term) {
                 input.checked = event.target.checked;
               });
 
-              atualizarLink();
+              atualizarEstadoPesquisa();
             };
 
-            atualizarLink();
+            atualizarEstadoPesquisa();
           }
 
-          function atualizarLink() {
+          function montarLinkPesquisaSilegis() {
             const tipos = selecionados(".silegis-tipo");
             const tram = selecionados(".silegis-tramitacao");
+            const texto = document.getElementById("silegisTexto")?.value.trim();
 
-            atualizarTextoBotao("tipoDropdown", "Selecionar tipo", tipos);
-            atualizarTextoBotao(
-              "tramitacaoDropdown",
-              "Selecionar tramitação",
-              tram.map(v => v === "True" ? "Sim" : "Não")
-            );
+            const filtros = [];
 
-            const link = document.getElementById("silegisLink");
-
-            if (!tipos.length || !tram.length) {
-              link.value = "";
-              return;
+            if (tipos.length) {
+              filtros.push(
+                `(${tipos
+                  .map(tipo => `identificadorProposicao.proposicaoTipo: "${valorTipoSilegis(tipo)}"`)
+                  .join(" or ")})`
+              );
             }
 
-            const filtrosTipo = tipos
-              .map(tipo => `identificadorProposicao.proposicaoTipo: "${valorTipoSilegis(tipo)}"`)
-              .join(" or ");
+            if (tram.length) {
+              filtros.push(
+                `(${tram
+                  .map(valor => `emTramitacao: ${valor}`)
+                  .join(" or ")})`
+              );
+            }
 
-            const filtrosTramitacao = tram
-              .map(valor => `emTramitacao: ${valor}`)
-              .join(" or ");
+            if (texto) {
+              filtros.push(`textos.conteudo: "${texto}"`);
+            }
 
-            const query = `(${filtrosTipo}) and (${filtrosTramitacao})`;
+            if (!filtros.length) return "";
 
-            link.value =
-              `https://silegis.almg.gov.br/silegismg/#/processos?sintaxe=LUCENE_EXTENDIDO&pesquisa=${encodeURIComponent(query)}`;
+            const query = filtros.join(" and ");
+
+            return `https://silegis.almg.gov.br/silegismg/#/processos?sintaxe=LUCENE_EXTENDIDO&pesquisa=${encodeURIComponent(query).replace(/%20/g, "+")}`;
           }
 
           document.querySelectorAll(".silegis-categoria").forEach(input => {
@@ -2960,7 +2966,7 @@ function renderOriginalSummary(term) {
           };
 
           document.querySelectorAll(".silegis-tramitacao").forEach(input => {
-            input.onchange = atualizarLink;
+            input.onchange = atualizarEstadoPesquisa;
           });
 
           document.getElementById("silegisTodasTramitacoes").onchange = event => {
@@ -2968,17 +2974,19 @@ function renderOriginalSummary(term) {
               input.checked = event.target.checked;
             });
 
-            atualizarLink();
+            atualizarEstadoPesquisa();
           };
 
+          document.getElementById("silegisTexto").oninput = atualizarEstadoPesquisa;
+
           document.getElementById("silegisPesquisarBtn").onclick = () => {
-            const link = document.getElementById("silegisLink").value;
+            const link = montarLinkPesquisaSilegis();
 
             if (!link) {
-              alert("Selecione pelo menos um tipo e uma situação de tramitação.");
+              alert("Informe pelo menos um critério de pesquisa.");
               return;
             }
-    
+
             window.open(link, "_blank", "noopener,noreferrer");
           };
 
@@ -2990,33 +2998,33 @@ function renderOriginalSummary(term) {
           abrirFecharDropdowns();
           renderTipos();
         }
-    function hasMatchingDescendant(term, query) {
-      if (!query) return true;
-      if (matchesTerm(term, query)) return true;
-      return childrenOf(term.id).some(child => hasMatchingDescendant(child, query));
-    }
+            function hasMatchingDescendant(term, query) {
+              if (!query) return true;
+              if (matchesTerm(term, query)) return true;
+              return childrenOf(term.id).some(child => hasMatchingDescendant(child, query));
+            }
 
-    function matchesTerm(term, query) {
-      const normalizedQuery = normalizeSearchText(query);
+            function matchesTerm(term, query) {
+              const normalizedQuery = normalizeSearchText(query);
 
-      if (!normalizedQuery) return true;
+              if (!normalizedQuery) return true;
+    
+              const upTerms = Array.isArray(term.relacionadosNaoAutorizados)
+                ? term.relacionadosNaoAutorizados
+                : [];
 
-      const upTerms = Array.isArray(term.relacionadosNaoAutorizados)
-        ? term.relacionadosNaoAutorizados
-        : [];
+              const text = [
+                term.termo,
+                term.termoAnterior,
+                term.conceito,
+                term.definicao,
+                term.notaEscopo,
+                term.notaUso,
+                ...upTerms
+              ].join(" ");
 
-      const text = [
-        term.termo,
-        term.termoAnterior,
-        term.conceito,
-        term.definicao,
-        term.notaEscopo,
-        term.notaUso,
-        ...upTerms
-      ].join(" ");
-
-      return normalizeSearchText(text).includes(normalizedQuery);
-    }
+              return normalizeSearchText(text).includes(normalizedQuery);
+            }
 
     function matchingUpValues(term, query) {
       const normalizedQuery = normalizeSearchText(query);
