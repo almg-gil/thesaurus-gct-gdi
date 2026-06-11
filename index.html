@@ -2702,7 +2702,6 @@ function renderOriginalSummary(term) {
     function renderSilegisSearchArea() {
           reviewMode = false;
           state.selectedId = null;
-
           treeEl.innerHTML = "";
 
           termArea.innerHTML = `
@@ -2714,24 +2713,39 @@ function renderOriginalSummary(term) {
             <div class="relation-box">
               <div class="form-grid">
                 <div class="field">
-                  <strong>Categoria</strong><br>
-                  <label><input type="checkbox" class="silegis-categoria" value="proposicao"> Proposição</label><br>
-                  <label><input type="checkbox" class="silegis-categoria" value="requerimento"> Requerimento</label><br>
-                  <label><input type="checkbox" id="silegisTodasCategorias"> Selecionar todos</label>
-                </div>
-
-                <div class="field">
-                  <strong>Tipo</strong>
-                  <div id="silegisTiposBox" class="muted" style="margin-top: 6px;">
-                    Selecione uma categoria.
+                  <label>Categoria</label>
+                  <div class="multi-select" id="categoriaDropdown">
+                    <button type="button" class="multi-select-btn">Selecionar categoria</button>
+                    <div class="multi-select-menu hidden">
+                      <label><input type="checkbox" class="silegis-categoria" value="proposicao"> Proposição</label>
+                      <label><input type="checkbox" class="silegis-categoria" value="requerimento"> Requerimento</label>
+                      <hr>
+                      <label><input type="checkbox" id="silegisTodasCategorias"> Selecionar todos</label>
+                    </div>
                   </div>
                 </div>
 
                 <div class="field">
-                  <strong>Em tramitação</strong><br>
-                  <label><input type="checkbox" class="silegis-tramitacao" value="True"> Sim</label><br>
-                  <label><input type="checkbox" class="silegis-tramitacao" value="False"> Não</label><br>
-                  <label><input type="checkbox" id="silegisTodasTramitacoes"> Selecionar todos</label>
+                  <label>Tipo</label>
+                  <div class="multi-select" id="tipoDropdown">
+                    <button type="button" class="multi-select-btn">Selecionar tipo</button>
+                    <div id="silegisTiposBox" class="multi-select-menu hidden">
+                      <div class="muted">Selecione uma categoria.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label>Em tramitação</label>
+                  <div class="multi-select" id="tramitacaoDropdown">
+                    <button type="button" class="multi-select-btn">Selecionar tramitação</button>
+                    <div class="multi-select-menu hidden">
+                      <label><input type="checkbox" class="silegis-tramitacao" value="True"> Sim</label>
+                      <label><input type="checkbox" class="silegis-tramitacao" value="False"> Não</label>
+                      <hr>
+                      <label><input type="checkbox" id="silegisTodasTramitacoes"> Selecionar todos</label>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="field full">
@@ -2756,16 +2770,30 @@ function renderOriginalSummary(term) {
             requerimento: ["RQN", "RQC"]
           };
 
-          const categorias = [...document.querySelectorAll(".silegis-categoria")];
-          const todasCategorias = document.getElementById("silegisTodasCategorias");
-          const tiposBox = document.getElementById("silegisTiposBox");
+          function abrirFecharDropdowns() {
+            document.querySelectorAll(".multi-select").forEach(dropdown => {
+              const btn = dropdown.querySelector(".multi-select-btn");
+              const menu = dropdown.querySelector(".multi-select-menu");
 
-          const tramitacoes = [...document.querySelectorAll(".silegis-tramitacao")];
-          const todasTramitacoes = document.getElementById("silegisTodasTramitacoes");
+              btn.onclick = event => {
+                event.stopPropagation();
 
-          const link = document.getElementById("silegisLink");
-          const pesquisarBtn = document.getElementById("silegisPesquisarBtn");
-          const voltarBtn = document.getElementById("voltarHierarquiaBtn");
+                document.querySelectorAll(".multi-select-menu").forEach(outroMenu => {
+                  if (outroMenu !== menu) outroMenu.classList.add("hidden");
+                });
+
+                menu.classList.toggle("hidden");
+              };
+
+              menu.onclick = event => event.stopPropagation();
+            });
+
+            document.addEventListener("click", () => {
+              document.querySelectorAll(".multi-select-menu").forEach(menu => {
+                menu.classList.add("hidden");
+              });
+            });
+          }
 
           function selecionados(selector) {
             return [...document.querySelectorAll(selector)]
@@ -2773,39 +2801,50 @@ function renderOriginalSummary(term) {
               .map(input => input.value);
           }
 
+          function atualizarTextoBotao(dropdownId, textoPadrao, valores) {
+            const btn = document.querySelector(`#${dropdownId} .multi-select-btn`);
+
+            if (!btn) return;
+
+            btn.textContent = valores.length ? valores.join(", ") : textoPadrao;
+          }
+
           function renderTipos() {
             const categoriasMarcadas = selecionados(".silegis-categoria");
             const tipos = categoriasMarcadas.flatMap(cat => tiposPorCategoria[cat] || []);
 
+            atualizarTextoBotao(
+              "categoriaDropdown",
+              "Selecionar categoria",
+              categoriasMarcadas.map(cat => cat === "proposicao" ? "Proposição" : "Requerimento")
+            );
+
+            const tiposBox = document.getElementById("silegisTiposBox");
+
             if (!tipos.length) {
-              tiposBox.innerHTML = '<span class="muted">Selecione uma categoria.</span>';
+              tiposBox.innerHTML = '<div class="muted">Selecione uma categoria.</div>';
+              atualizarTextoBotao("tipoDropdown", "Selecionar tipo", []);
               atualizarLink();
               return;
             }
 
             tiposBox.innerHTML = `
               ${tipos.map(tipo => `
-                <label>
-                  <input type="checkbox" class="silegis-tipo" value="${tipo}">
-                  ${tipo}
-                </label><br>
+                <label><input type="checkbox" class="silegis-tipo" value="${tipo}"> ${tipo}</label>
               `).join("")}
-              <label>
-                <input type="checkbox" id="silegisTodosTipos">
-                Selecionar todos
-              </label>
+              <hr>
+              <label><input type="checkbox" id="silegisTodosTipos"> Selecionar todos</label>
             `;
 
             document.querySelectorAll(".silegis-tipo").forEach(input => {
               input.onchange = atualizarLink;
             });
 
-            const todosTipos = document.getElementById("silegisTodosTipos");
-            todosTipos.onchange = () => {
+            document.getElementById("silegisTodosTipos").onchange = event => {
               document.querySelectorAll(".silegis-tipo").forEach(input => {
-                input.checked = todosTipos.checked;
+                input.checked = event.target.checked;
               });
-    
+
               atualizarLink();
             };
 
@@ -2815,6 +2854,15 @@ function renderOriginalSummary(term) {
           function atualizarLink() {
             const tipos = selecionados(".silegis-tipo");
             const tram = selecionados(".silegis-tramitacao");
+
+            atualizarTextoBotao("tipoDropdown", "Selecionar tipo", tipos);
+            atualizarTextoBotao(
+              "tramitacaoDropdown",
+              "Selecionar tramitação",
+              tram.map(v => v === "True" ? "Sim" : "Não")
+            );
+
+            const link = document.getElementById("silegisLink");
 
             if (!tipos.length || !tram.length) {
               link.value = "";
@@ -2835,46 +2883,47 @@ function renderOriginalSummary(term) {
               `https://silegis.almg.gov.br/silegismg/#/processos?sintaxe=LUCENE_EXTENDIDO&pesquisa=${encodeURIComponent(query)}`;
           }
 
-          categorias.forEach(input => {
-            input.onchange = () => {
-              renderTipos();
-            };
+          document.querySelectorAll(".silegis-categoria").forEach(input => {
+            input.onchange = renderTipos;
           });
 
-          todasCategorias.onchange = () => {
-            categorias.forEach(input => {
-              input.checked = todasCategorias.checked;
+          document.getElementById("silegisTodasCategorias").onchange = event => {
+            document.querySelectorAll(".silegis-categoria").forEach(input => {
+              input.checked = event.target.checked;
             });
 
             renderTipos();
           };
 
-          tramitacoes.forEach(input => {
+          document.querySelectorAll(".silegis-tramitacao").forEach(input => {
             input.onchange = atualizarLink;
           });
 
-          todasTramitacoes.onchange = () => {
-            tramitacoes.forEach(input => {
-              input.checked = todasTramitacoes.checked;
+          document.getElementById("silegisTodasTramitacoes").onchange = event => {
+            document.querySelectorAll(".silegis-tramitacao").forEach(input => {
+              input.checked = event.target.checked;
             });
 
             atualizarLink();
           };
 
-          pesquisarBtn.onclick = () => {
-            if (!link.value) {
+          document.getElementById("silegisPesquisarBtn").onclick = () => {
+            const link = document.getElementById("silegisLink").value;
+
+            if (!link) {
               alert("Selecione pelo menos um tipo e uma situação de tramitação.");
               return;
             }
-
-            window.open(link.value, "_blank", "noopener,noreferrer");
+    
+            window.open(link, "_blank", "noopener,noreferrer");
           };
 
-          voltarBtn.onclick = () => {
+          document.getElementById("voltarHierarquiaBtn").onclick = () => {
             state.selectedId = null;
             render();
           };
 
+          abrirFecharDropdowns();
           renderTipos();
         }
     function hasMatchingDescendant(term, query) {
