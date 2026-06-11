@@ -3088,6 +3088,18 @@ function renderOriginalSummary(term) {
                 }
               }
 
+              const termosThesaurus = [...silegisThesaurusSelecionados]
+                  .map(getTerm)
+                  .filter(Boolean)
+                  .map(term => displayTermName(term));
+
+                if (termosThesaurus.length) {
+                  filtros.push(
+                    `(${termosThesaurus
+                      .map(termo => `thesaurus: "${termo}"`)
+                      .join(" or ")})`
+                  );
+                }
               if (!filtros.length) return "";
 
               const query = filtros.join(" and ");
@@ -3120,8 +3132,10 @@ function renderOriginalSummary(term) {
           };
 
           document.getElementById("silegisTexto").oninput = atualizarEstadoPesquisa;
+        
 
-          document.getElementById("silegisPesquisarBtn").onclick = () => {
+        document.getElementById("silegisThesaurusBusca").oninput = renderSilegisThesaurusTree;  
+        document.getElementById("silegisPesquisarBtn").onclick = () => {
             const link = montarLinkPesquisaSilegis();
 
             if (!link) {
@@ -3137,8 +3151,9 @@ function renderOriginalSummary(term) {
             render();
           };
 
-          abrirFecharDropdowns();
-          renderTipos();
+        abrirFecharDropdowns();
+        renderTipos();
+        renderSilegisThesaurusTree();
         }
             function hasMatchingDescendant(term, query) {
               if (!query) return true;
