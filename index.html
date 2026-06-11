@@ -2750,7 +2750,8 @@ function renderOriginalSummary(term) {
           state.selectedId = null;
           treeEl.innerHTML = "";
 
-          termArea.innerHTML = `
+        buildIndexes();  
+        termArea.innerHTML = `
             <div class="term-header">
               <h1>Pesquisa no Silegis</h1>
               <div class="muted">Selecione uma ou mais opções para montar a pesquisa.</div>
@@ -2800,6 +2801,15 @@ function renderOriginalSummary(term) {
                 </div>
               </div>
 
+              <div class="field full">
+                  <label>Busca na indexação</label>
+                  <input id="silegisThesaurusBusca" type="search" placeholder="Digite para localizar um termo..." />
+
+                    <div id="silegisThesaurusTree" class="tree-box" style="max-height: 320px; min-height: 220px; margin-top: 8px;"></div>
+
+                    <div id="silegisThesaurusSelecionados" class="muted" style="margin-top: 6px;"></div>
+            </div>
+
               <div class="toolbar">
                 <button id="silegisPesquisarBtn" class="primary">Pesquisar</button>
                 <button id="voltarHierarquiaBtn">Voltar para hierarquia</button>
@@ -2828,71 +2838,183 @@ function renderOriginalSummary(term) {
             proposicao: ["PL", "PEC", "PLC", "PRE"],
             requerimento: ["RQN", "RQC"]
           };
+        const silegisThesaurusSelecionados = new Set();
+        const silegisThesaurusExpandidos = new Set();
 
-          function abrirFecharDropdowns() {
-            document.querySelectorAll(".multi-select").forEach(dropdown => {
-              const btn = dropdown.querySelector(".multi-select-btn");
-              const menu = dropdown.querySelector(".multi-select-menu");
+        function termoBateNaBuscaSilegis(term, query) {
+          if (!query) return true;
 
-              btn.onclick = event => {
-                event.stopPropagation();
+          return normalizeSearchText(displayTermName(term)).includes(query);
+        }
 
-                document.querySelectorAll(".multi-select-menu").forEach(outroMenu => {
-                  if (outroMenu !== menu) outroMenu.classList.add("hidden");
-                });
+        function termoOuFilhoBateNaBuscaSilegis(term, query) {
+          if (!query) return true;
+          if (termoBateNaBuscaSilegis(term, query)) return true;
 
-                menu.classList.toggle("hidden");
-              };
+          return childrenOf(term.id).some(child =>
+            termoOuFilhoBateNaBuscaSilegis(child, query)
+          );
+        }
 
-              menu.onclick = event => event.stopPropagation();
+        function renderSilegisThesaurusTree() {
+          const tree = document.getElementById("silegisThesaurusTree");
+          const busca = normalizeSearchText(document.getElementById("silegisThesaurusBusca")?.value || "");
+
+          if (!tree) return;
+
+          tree.innerHTML = "";
+
+          childrenOf(null).forEach(term => {
+            renderSilegisThesaurusNode(term, 0, busca, tree);
+          });
+
+          renderSilegisThesaurusSelecionados();
+        }
+
+        function renderSilegisThesaurusNode(term, level, busca, container) {
+          if (!termoOuFilhoBateNaBuscaSilegis(term, busca)) return;
+
+          const children = childrenOf(term.id);
+          const expanded = busca || silegisThesaurusExpandidos.has(term.id);
+
+          const row = document.createElement("div");
+          row.className = "tree-item";
+          row.style.paddingLeft = `${level * 18 + 4}px`;
+
+          const toggle = document.createElement("button");
+          toggle.className = "toggle";
+          toggle.textContent = children.length ? (expanded ? "▾" : "▸") : "•";
+
+          toggle.onclick = event => {
+            event.stopPropagation();
+
+            if (!children.length) return;
+
+            if (silegisThesaurusExpandidos.has(term.id)) {
+              silegisThesaurusExpandidos.delete(term.id);
+            } else {
+              silegisThesaurusExpandidos.add(term.id);
+            }
+
+            renderSilegisThesaurusTree();
+          };
+
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = silegisThesaurusSelecionados.has(term.id);
+          checkbox.style.width = "auto";
+          checkbox.style.margin = "0";
+
+          checkbox.onchange = () => {
+            if (checkbox.checked) {
+              silegisThesaurusSelecionados.add(term.id);
+            } else {
+              silegisThesaurusSelecionados.delete(term.id);
+            }
+
+            renderSilegisThesaurusSelecionados();
+          };
+
+          const label = document.createElement("button");
+          label.className = "term-label";
+          label.textContent = displayTermName(term);
+
+          label.onclick = () => {
+            checkbox.checked = !checkbox.checked;
+            checkbox.onchange();
+          };
+
+          row.appendChild(toggle);
+          row.appendChild(checkbox);
+          row.appendChild(label);
+
+          container.appendChild(row);
+
+          if (expanded) {
+            children.forEach(child => {
+              renderSilegisThesaurusNode(child, level + 1, busca, container);
             });
-
-            document.addEventListener("click", () => {
-              document.querySelectorAll(".multi-select-menu").forEach(menu => {
-                menu.classList.add("hidden");
-              });
-            });
           }
+        }
 
-          function selecionados(selector) {
-            return [...document.querySelectorAll(selector)]
-              .filter(input => input.checked)
-              .map(input => input.value);
-          }
+        function renderSilegisThesaurusSelecionados() {
+          const box = document.getElementById("silegisThesaurusSelecionados");
+          if (!box) return;
 
-          function atualizarTextoBotao(dropdownId, textoPadrao, valores) {
-            const btn = document.querySelector(`#${dropdownId} .multi-select-btn`);
-            if (!btn) return;
-            btn.textContent = valores.length ? valores.join(", ") : textoPadrao;
-          }
+          const termos = [...silegisThesaurusSelecionados]
+            .map(getTerm)
+            .filter(Boolean)
+            .map(displayTermName);
 
-          function atualizarEstadoPesquisa() {
-            const tipos = selecionados(".silegis-tipo");
-            const tram = selecionados(".silegis-tramitacao");
+          box.textContent = termos.length
+            ? `Selecionado(s): ${termos.join("; ")}`
+            : "Nenhum termo de indexação selecionado.";
+        }
 
-            atualizarTextoBotao("tipoDropdown", "Selecionar tipo", tipos);
+                  function abrirFecharDropdowns() {
+                    document.querySelectorAll(".multi-select").forEach(dropdown => {
+                      const btn = dropdown.querySelector(".multi-select-btn");
+                      const menu = dropdown.querySelector(".multi-select-menu");
 
-            atualizarTextoBotao(
-              "tramitacaoDropdown",
-              "Selecionar tramitação",
-              tram.map(v => v === "True" ? "Sim" : "Não")
-            );
-          }
+                      btn.onclick = event => {
+                        event.stopPropagation();
 
-          function renderTipos() {
-            const categoriasMarcadas = selecionados(".silegis-categoria");
+                        document.querySelectorAll(".multi-select-menu").forEach(outroMenu => {
+                          if (outroMenu !== menu) outroMenu.classList.add("hidden");
+                        });
 
-            const categoriasParaTipos = categoriasMarcadas.length
-              ? categoriasMarcadas
-              : Object.keys(tiposPorCategoria);
+                        menu.classList.toggle("hidden");
+                      };
 
-            const tipos = categoriasParaTipos.flatMap(cat => tiposPorCategoria[cat] || []);
+                      menu.onclick = event => event.stopPropagation();
+                    });
 
-            atualizarTextoBotao(
-              "categoriaDropdown",
-              "Selecionar categoria",
-              categoriasMarcadas.map(cat => cat === "proposicao" ? "Proposição" : "Requerimento")
-            );
+                    document.addEventListener("click", () => {
+                      document.querySelectorAll(".multi-select-menu").forEach(menu => {
+                        menu.classList.add("hidden");
+                      });
+                    });
+                  }
+
+                  function selecionados(selector) {
+                    return [...document.querySelectorAll(selector)]
+                      .filter(input => input.checked)
+                      .map(input => input.value);
+                  }
+
+                  function atualizarTextoBotao(dropdownId, textoPadrao, valores) {
+                    const btn = document.querySelector(`#${dropdownId} .multi-select-btn`);
+                    if (!btn) return;
+                    btn.textContent = valores.length ? valores.join(", ") : textoPadrao;
+                  }
+
+                  function atualizarEstadoPesquisa() {
+                    const tipos = selecionados(".silegis-tipo");
+                    const tram = selecionados(".silegis-tramitacao");
+
+                    atualizarTextoBotao("tipoDropdown", "Selecionar tipo", tipos);
+
+                    atualizarTextoBotao(
+                      "tramitacaoDropdown",
+                      "Selecionar tramitação",
+                      tram.map(v => v === "True" ? "Sim" : "Não")
+                    );
+                  }
+
+                  function renderTipos() {
+                    const categoriasMarcadas = selecionados(".silegis-categoria");
+
+                    const categoriasParaTipos = categoriasMarcadas.length
+                      ? categoriasMarcadas
+                      : Object.keys(tiposPorCategoria);
+
+                    const tipos = categoriasParaTipos.flatMap(cat => tiposPorCategoria[cat] || []);
+
+                    atualizarTextoBotao(
+                      "categoriaDropdown",
+                      "Selecionar categoria",
+                      categoriasMarcadas.map(cat => cat === "proposicao" ? "Proposição" : "Requerimento")
+                    );
 
             const tiposBox = document.getElementById("silegisTiposBox");
 
