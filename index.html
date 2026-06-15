@@ -3165,18 +3165,13 @@ function renderOriginalSummary(term) {
               const normalizedQuery = normalizeSearchText(query);
 
               if (!normalizedQuery) return true;
-    
+
               const upTerms = Array.isArray(term.relacionadosNaoAutorizados)
                 ? term.relacionadosNaoAutorizados
                 : [];
 
               const text = [
                 term.termo,
-                term.termoAnterior,
-                term.conceito,
-                term.definicao,
-                term.notaEscopo,
-                term.notaUso,
                 ...upTerms
               ].join(" ");
 
