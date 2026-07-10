@@ -324,6 +324,16 @@
 
     button:hover { background: #f3f3f3; }
 
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      background: #f7f7f7;
+    }
+
+    button:disabled:hover {
+      background: #f7f7f7;
+    }
+
     button.primary {
       border-color: var(--blue);
       color: white;
@@ -1840,8 +1850,180 @@ function userCanAccessManagement() {
       }
     }
 
+    function comparableStringList(values) {
+      return (Array.isArray(values) ? values : [])
+        .map(String)
+        .sort((a, b) => a.localeCompare(b, "pt-BR"));
+    }
+
+    function sameComparableStringList(a, b) {
+      return JSON.stringify(comparableStringList(a)) ===
+        JSON.stringify(comparableStringList(b));
+    }
+
+    function termMatchesOriginal(term) {
+      if (!term || !term.original) return false;
+
+      const current = snapshotTerm(term);
+      const original = term.original;
+
+      return (
+        (current.parentId || null) === (original.parentId || null) &&
+        current.termo === (original.termo || "") &&
+        current.termoAnterior === (original.termoAnterior || "") &&
+        current.conceito === (original.conceito || "") &&
+        current.definicao === (original.definicao || "") &&
+        current.notaEscopo === (original.notaEscopo || "") &&
+        current.notaUso === (original.notaUso || "") &&
+        sameComparableStringList(current.relacionados, original.relacionados) &&
+        sameComparableStringList(
+          current.relacionadosNaoAutorizados,
+          original.relacionadosNaoAutorizados
+        )
+      );
+    }
+
+    function clearReviewIfBackToOriginal(term) {
+      if (
+        term &&
+        term.revisao === REVIEW_MODIFICADO &&
+        term.original &&
+        termMatchesOriginal(term)
+      ) {
+        clearReview(term);
+      }
+    }
+
+    function unauthorizedValueByKey(values, key) {
+      return (Array.isArray(values) ? values : []).find(
+        value => normalizeUpDuplicateKey(value) === key
+      ) || "";
+    }
+
+    function hasUnauthorizedValueKey(values, key) {
+      return Boolean(unauthorizedValueByKey(values, key));
+    }
+
+    function addUnauthorizedValueIfMissing(term, value) {
+      if (!term || !value) return;
+
+      const key = normalizeUpDuplicateKey(value);
+      term.relacionadosNaoAutorizados = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      if (!hasUnauthorizedValueKey(term.relacionadosNaoAutorizados, key)) {
+        term.relacionadosNaoAutorizados.push(value);
+      }
+    }
+
+    function removeUnauthorizedValueByKey(term, key) {
+      if (!term) return;
+
+      term.relacionadosNaoAutorizados = (
+        Array.isArray(term.relacionadosNaoAutorizados)
+          ? term.relacionadosNaoAutorizados
+          : []
+      ).filter(value => normalizeUpDuplicateKey(value) !== key);
+    }
+
+    function restoreReciprocalAuthorizedRelations(term) {
+      const affectedTerms = new Set();
+      const originalIds = new Set(
+        (term.original?.relacionados || []).map(String)
+      );
+      const currentIds = new Set(
+        (term.relacionados || []).map(String)
+      );
+      const allIds = new Set([...originalIds, ...currentIds]);
+
+      allIds.forEach(relatedId => {
+        const relatedTerm = getTerm(relatedId);
+        if (!relatedTerm) return;
+
+        relatedTerm.relacionados = Array.isArray(relatedTerm.relacionados)
+          ? relatedTerm.relacionados.map(String)
+          : [];
+
+        if (originalIds.has(relatedId)) {
+          if (!relatedTerm.relacionados.includes(String(term.id))) {
+            relatedTerm.relacionados.push(String(term.id));
+          }
+        } else {
+          relatedTerm.relacionados = relatedTerm.relacionados.filter(
+            id => String(id) !== String(term.id)
+          );
+        }
+
+        affectedTerms.add(relatedTerm);
+      });
+
+      return affectedTerms;
+    }
+
+    function restoreMovedUnauthorizedRelations(term) {
+      const affectedTerms = new Set();
+      const originalValues = Array.isArray(term.original?.relacionadosNaoAutorizados)
+        ? term.original.relacionadosNaoAutorizados
+        : [];
+      const currentValues = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      const originalKeys = new Set(originalValues.map(normalizeUpDuplicateKey));
+      const currentKeys = new Set(currentValues.map(normalizeUpDuplicateKey));
+
+      // UPs que saíram deste termo: remove a cópia do possível termo de destino.
+      originalKeys.forEach(key => {
+        if (currentKeys.has(key)) return;
+
+        state.terms.forEach(candidate => {
+          if (candidate.id === term.id || !candidate.original) return;
+
+          const candidateOriginal = candidate.original.relacionadosNaoAutorizados || [];
+          const candidateCurrent = candidate.relacionadosNaoAutorizados || [];
+
+          if (
+            !hasUnauthorizedValueKey(candidateOriginal, key) &&
+            hasUnauthorizedValueKey(candidateCurrent, key)
+          ) {
+            removeUnauthorizedValueByKey(candidate, key);
+            affectedTerms.add(candidate);
+          }
+        });
+      });
+
+      // UPs que chegaram a este termo: devolve ao possível termo de origem.
+      currentKeys.forEach(key => {
+        if (originalKeys.has(key)) return;
+
+        state.terms.forEach(candidate => {
+          if (candidate.id === term.id || !candidate.original) return;
+
+          const candidateOriginal = candidate.original.relacionadosNaoAutorizados || [];
+          const candidateCurrent = candidate.relacionadosNaoAutorizados || [];
+          const originalValue = unauthorizedValueByKey(candidateOriginal, key);
+
+          if (
+            originalValue &&
+            !hasUnauthorizedValueKey(candidateCurrent, key)
+          ) {
+            addUnauthorizedValueIfMissing(candidate, originalValue);
+            affectedTerms.add(candidate);
+          }
+        });
+      });
+
+      return affectedTerms;
+    }
+
     function restoreTermFromOriginal(term) {
       if (!term || !term.original) return false;
+
+      const affectedTerms = new Set([
+        ...restoreReciprocalAuthorizedRelations(term),
+        ...restoreMovedUnauthorizedRelations(term)
+      ]);
 
       term.parentId = term.original.parentId || null;
       term.termo = term.original.termo || term.termo;
@@ -1850,10 +2032,16 @@ function userCanAccessManagement() {
       term.definicao = term.original.definicao || "";
       term.notaEscopo = term.original.notaEscopo || "";
       term.notaUso = term.original.notaUso || "";
-      term.relacionados = Array.isArray(term.original.relacionados) ? [...term.original.relacionados] : [];
-      term.relacionadosNaoAutorizados = Array.isArray(term.original.relacionadosNaoAutorizados)
+      term.relacionados = Array.isArray(term.original.relacionados)
+        ? [...term.original.relacionados]
+        : [];
+      term.relacionadosNaoAutorizados = Array.isArray(
+        term.original.relacionadosNaoAutorizados
+      )
         ? [...term.original.relacionadosNaoAutorizados]
         : [];
+
+      affectedTerms.forEach(clearReviewIfBackToOriginal);
 
       return true;
     }
@@ -3441,7 +3629,15 @@ function renderOriginalSummary(term) {
           <div class="toolbar">
             <button id="saveTermBtn" class="primary">Salvar alterações</button>
             <button id="suggestDeleteBtn" class="${deleteButtonClass}">${deleteButtonLabel}</button>
-            <button id="clearReviewBtn">Limpar marcação</button>
+            <button
+              id="restoreOriginalBtn"
+              ${term.revisao === REVIEW_ORIGINAL ? "disabled" : ""}
+              title="${
+                term.revisao === REVIEW_NOVO
+                  ? "Descartar este termo novo"
+                  : "Descartar alterações pendentes e restaurar o estado original"
+              }"
+            >Voltar ao original</button>
           </div>
         </div>
 
@@ -4262,7 +4458,15 @@ return true;
           await saveState();
           render();
         };
-        }  
+        }
+
+      const restoreOriginalBtn = document.getElementById("restoreOriginalBtn");
+
+      if (restoreOriginalBtn) {
+        restoreOriginalBtn.onclick = async () => {
+          await voltarTermoAoOriginal(term.id);
+        };
+      }
 
             termArea.querySelectorAll("[data-rel-action]").forEach(btn => {
               btn.onclick = async () => {
@@ -4520,6 +4724,126 @@ return true;
       if (state.selectedId === termId) {
         state.selectedId = state.terms[0]?.id || null;
       }
+    }
+
+    function restoreCounterpartsBeforeDiscardingNewTerm(term) {
+      const affectedTerms = new Set();
+      const unauthorizedValues = Array.isArray(term.relacionadosNaoAutorizados)
+        ? term.relacionadosNaoAutorizados
+        : [];
+
+      unauthorizedValues.forEach(value => {
+        const key = normalizeUpDuplicateKey(value);
+
+        state.terms.forEach(candidate => {
+          if (candidate.id === term.id || !candidate.original) return;
+
+          const candidateOriginal = candidate.original.relacionadosNaoAutorizados || [];
+          const candidateCurrent = candidate.relacionadosNaoAutorizados || [];
+          const originalValue = unauthorizedValueByKey(candidateOriginal, key);
+
+          if (
+            originalValue &&
+            !hasUnauthorizedValueKey(candidateCurrent, key)
+          ) {
+            addUnauthorizedValueIfMissing(candidate, originalValue);
+            affectedTerms.add(candidate);
+          }
+        });
+      });
+
+      (term.relacionados || []).forEach(relatedId => {
+        const relatedTerm = getTerm(relatedId);
+        if (relatedTerm) affectedTerms.add(relatedTerm);
+      });
+
+      return affectedTerms;
+    }
+
+    async function voltarTermoAoOriginal(termId) {
+      const term = getTerm(termId);
+      if (!term) return;
+
+      if (term.revisao === REVIEW_ORIGINAL) {
+        alert("Este termo não possui alterações pendentes.");
+        return;
+      }
+
+      if (term.revisao === REVIEW_NOVO) {
+        if (childrenOf(term.id).length) {
+          alert(
+            "Não é possível descartar este termo porque ele possui termos específicos. " +
+            "Mova ou remova os termos específicos primeiro."
+          );
+          return;
+        }
+
+        const confirmed = confirm(
+          `O termo "${displayTermName(term)}" é novo.\n\n` +
+          "Voltar ao original descartará completamente esse termo.\n\n" +
+          "Deseja continuar?"
+        );
+
+        if (!confirmed) return;
+
+        const parentId = term.parentId || null;
+        const affectedTerms = restoreCounterpartsBeforeDiscardingNewTerm(term);
+
+        removeTermCompletely(term.id);
+        affectedTerms.forEach(clearReviewIfBackToOriginal);
+
+        state.selectedId = parentId && getTerm(parentId)
+          ? parentId
+          : null;
+
+        await saveState();
+        reviewMode = false;
+        render();
+        return;
+      }
+
+      if (!term.original) {
+        if (term.revisao === REVIEW_EXCLUIR) {
+          const confirmed = confirm(
+            `Cancelar a sugestão de exclusão do termo "${displayTermName(term)}"?`
+          );
+
+          if (!confirmed) return;
+
+          clearReview(term);
+          await saveState();
+          reviewMode = false;
+          render();
+          setActiveTab("cadastro");
+          return;
+        }
+
+        alert(
+          "Não existe uma cópia do estado original deste termo. " +
+          "Isso pode ocorrer em registros antigos criados antes da implantação do histórico."
+        );
+        return;
+      }
+
+      const confirmed = confirm(
+        `Voltar o termo "${displayTermName(term)}" ao estado original?\n\n` +
+        "Todas as alterações pendentes deste termo serão descartadas."
+      );
+
+      if (!confirmed) return;
+
+      restoreTermFromOriginal(term);
+      const restoredParentId = term.parentId || null;
+      clearReview(term);
+
+      if (restoredParentId && !state.expanded.includes(restoredParentId)) {
+        state.expanded.push(restoredParentId);
+      }
+
+      await saveState();
+      reviewMode = false;
+      render();
+      setActiveTab("cadastro");
     }
 
     function findPendingChangeById(changeId) {
