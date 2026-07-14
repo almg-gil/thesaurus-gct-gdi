@@ -2608,12 +2608,72 @@ function renderPendingTermGroupHtml(group) {
   `;
 }
 
+function unauthorizedTermsDiff(change) {
+  if (
+    change.field !== "relacionadosNaoAutorizados" ||
+    !Array.isArray(change.currentRaw) ||
+    !Array.isArray(change.suggestedRaw)
+  ) {
+    return null;
+  }
+
+  const atuais = change.currentRaw.map(String);
+  const sugeridos = change.suggestedRaw.map(String);
+
+  const chavesAtuais = new Set(
+    atuais.map(normalizeUpDuplicateKey)
+  );
+
+  const chavesSugeridas = new Set(
+    sugeridos.map(normalizeUpDuplicateKey)
+  );
+
+  const acrescentados = sugeridos.filter(value =>
+    !chavesAtuais.has(normalizeUpDuplicateKey(value))
+  );
+
+  const retirados = atuais.filter(value =>
+    !chavesSugeridas.has(normalizeUpDuplicateKey(value))
+  );
+
+  return {
+    acrescentados,
+    retirados
+  };
+}
+
+function pendingChangeDisplayTitle(change) {
+  const diff = unauthorizedTermsDiff(change);
+
+  if (!diff) {
+    return change.title || "Alteração";
+  }
+
+  if (diff.acrescentados.length === 1 && !diff.retirados.length) {
+    return "Termo não autorizado acrescentado";
+  }
+
+  if (diff.acrescentados.length > 1 && !diff.retirados.length) {
+    return "Termos não autorizados acrescentados";
+  }
+
+  if (diff.retirados.length === 1 && !diff.acrescentados.length) {
+    return "Retirada de termo não autorizado sugerida";
+  }
+
+  if (diff.retirados.length > 1 && !diff.acrescentados.length) {
+    return "Retirada de termos não autorizados sugerida";
+  }
+
+  return "Termos não autorizados alterados";
+}
+
 function renderPendingChangeInGroupHtml(change) {
   return `
     <div class="pending-card review-${escapeAttr(change.type || REVIEW_ORIGINAL)}">
       <div class="pending-title">
         <span class="review-badge ${escapeAttr(change.type || "")}">${escapeHtml(change.typeLabel || "alteração")}</span>
-        <strong>${escapeHtml(change.title || "Alteração")}</strong>
+        <strong>${escapeHtml(pendingChangeDisplayTitle(change))}</strong>
       </div>
 
       ${
@@ -2648,6 +2708,22 @@ function listRemovedItems(originalList, currentList) {
 }
 
 function changeTextForHistory(change) {
+  const unauthorizedDiff = unauthorizedTermsDiff(change);
+
+  if (unauthorizedDiff) {
+    const lines = [];
+
+    unauthorizedDiff.acrescentados.forEach(value => {
+      lines.push(`Termo não autorizado acrescentado: ${value}`);
+    });
+
+    unauthorizedDiff.retirados.forEach(value => {
+      lines.push(`Retirada de termo não autorizado sugerida: ${value}`);
+    });
+
+    return lines.join("\n");
+  }
+
   if (change.kind === "field" || change.kind === "parent") {
     return `${change.title}\nAtual: ${change.currentValue || "—"}\nSugestão: ${change.suggestedValue || "—"}`;
   }
@@ -2656,19 +2732,78 @@ function changeTextForHistory(change) {
 }
 
 function renderChangeSummaryHtml(change) {
+  const unauthorizedDiff = unauthorizedTermsDiff(change);
+
+  if (unauthorizedDiff) {
+    const title = pendingChangeDisplayTitle(change);
+
+    const acrescentadosHtml = unauthorizedDiff.acrescentados.length
+      ? `
+        <div class="change-summary-block">
+          ${
+            unauthorizedDiff.retirados.length
+              ? '<span class="change-summary-label">Acrescentado:</span>'
+              : ""
+          }
+
+          <div class="change-summary-text">
+            ${unauthorizedDiff.acrescentados
+              .map(value => escapeHtml(value))
+              .join("<br>")}
+          </div>
+        </div>
+      `
+      : "";
+
+    const retiradosHtml = unauthorizedDiff.retirados.length
+      ? `
+        <div class="change-summary-block">
+          ${
+            unauthorizedDiff.acrescentados.length
+              ? '<span class="change-summary-label">Retirada sugerida:</span>'
+              : ""
+          }
+
+          <div class="change-summary-text">
+            ${unauthorizedDiff.retirados
+              .map(value => escapeHtml(value))
+              .join("<br>")}
+          </div>
+        </div>
+      `
+      : "";
+
+    return `
+      <div class="change-summary">
+        <div class="change-summary-title">
+          ${escapeHtml(title)}
+        </div>
+
+        ${acrescentadosHtml}
+        ${retiradosHtml}
+      </div>
+    `;
+  }
+
   if (change.kind === "field" || change.kind === "parent") {
     return `
       <div class="change-summary">
-        <div class="change-summary-title">${escapeHtml(change.title)}</div>
+        <div class="change-summary-title">
+          ${escapeHtml(change.title)}
+        </div>
 
         <div class="change-summary-block">
           <span class="change-summary-label">Atual:</span>
-          <div class="change-summary-text">${escapeHtml(change.currentValue || "—")}</div>
+          <div class="change-summary-text">
+            ${escapeHtml(change.currentValue || "—")}
+          </div>
         </div>
 
         <div class="change-summary-block">
           <span class="change-summary-label">Sugestão:</span>
-          <div class="change-summary-text">${escapeHtml(change.suggestedValue || "—")}</div>
+          <div class="change-summary-text">
+            ${escapeHtml(change.suggestedValue || "—")}
+          </div>
         </div>
       </div>
     `;
@@ -2676,11 +2811,12 @@ function renderChangeSummaryHtml(change) {
 
   return `
     <div class="change-summary">
-      <div class="change-summary-title">${escapeHtml(change.title)}</div>
+      <div class="change-summary-title">
+        ${escapeHtml(change.title)}
+      </div>
     </div>
   `;
 }
-
 function pendingChangeItems(term) {
   if (!term || !isTermPending(term)) return [];
 
