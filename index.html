@@ -1728,6 +1728,8 @@ function userCanAccessManagement() {
             definicao: "Definição alterada",
             notaEscopo: "Nota Explicativa alterada",
             notaUso: "Nota Histórica alterada"
+            relacionados: "Termos relacionados alterados",
+            relacionadosNaoAutorizados: "Termos não autorizados alterados"
           };
 
           return titles[field] || "Alteração registrada";
@@ -4079,17 +4081,17 @@ function renderOriginalSummary(term) {
     }
 
     function addUnauthorizedRelation(term, value) {
-      const upValue = String(value || "").trim();
+        const upValue = String(value || "").trim();
 
       if (!term || !upValue) return false;
 
-      term.relacionadosNaoAutorizados = Array.isArray(term.relacionadosNaoAutorizados)
-        ? term.relacionadosNaoAutorizados
+      const before = Array.isArray(term.relacionadosNaoAutorizados)
+        ? [...term.relacionadosNaoAutorizados]
         : [];
 
       const newKey = normalizeUpDuplicateKey(upValue);
 
-      const alreadyExists = term.relacionadosNaoAutorizados.some(existing =>
+      const alreadyExists = before.some(existing =>
         normalizeUpDuplicateKey(existing) === newKey
       );
 
@@ -4100,12 +4102,21 @@ function renderOriginalSummary(term) {
 
       ensureOriginal(term);
 
-      term.relacionadosNaoAutorizados.push(upValue);
+      const after = [...before, upValue];
+
+      registerPendingFieldChange(
+        term,
+        "relacionadosNaoAutorizados",
+        before,
+        after
+      );
+
+      term.relacionadosNaoAutorizados = after;
 
       markModified(term);
       return true;
     }
-
+      
     function editUnauthorizedRelation(term, index, newValue) {
       if (!term || !newValue) return false;
 
