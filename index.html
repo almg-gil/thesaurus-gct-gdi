@@ -2812,11 +2812,12 @@ function renderChangeSummaryHtml(change) {
   return `
     <div class="change-summary">
       <div class="change-summary-title">
-        ${escapeHtml(change.title)}
+        ${escapeHtml(change.title || "Alteração")}
       </div>
     </div>
   `;
 }
+
 function pendingChangeItems(term) {
   if (!term || !isTermPending(term)) return [];
 
@@ -4217,7 +4218,7 @@ function renderOriginalSummary(term) {
     }
 
     function addUnauthorizedRelation(term, value) {
-        const upValue = String(value || "").trim();
+      const upValue = String(value || "").trim();
 
       if (!term || !upValue) return false;
 
@@ -4252,20 +4253,42 @@ function renderOriginalSummary(term) {
       markModified(term);
       return true;
     }
-      
-    function editUnauthorizedRelation(term, index, newValue) {
-      if (!term || !newValue) return false;
 
-      const list = Array.isArray(term.relacionadosNaoAutorizados)
-        ? term.relacionadosNaoAutorizados
+    function editUnauthorizedRelation(term, index, newValue) {
+      const editedValue = String(newValue || "").trim();
+
+      if (!term || !editedValue) return false;
+
+      const before = Array.isArray(term.relacionadosNaoAutorizados)
+        ? [...term.relacionadosNaoAutorizados]
         : [];
 
-      if (!list[index]) return false;
+      if (!before[index]) return false;
+
+      const editedKey = normalizeUpDuplicateKey(editedValue);
+      const duplicateExists = before.some((existing, existingIndex) =>
+        existingIndex !== index &&
+        normalizeUpDuplicateKey(existing) === editedKey
+      );
+
+      if (duplicateExists) {
+        alert(`Este UP já existe neste termo: "${editedValue}".`);
+        return false;
+      }
 
       ensureOriginal(term);
 
-      list[index] = newValue;
-      term.relacionadosNaoAutorizados = list;
+      const after = [...before];
+      after[index] = editedValue;
+
+      registerPendingFieldChange(
+        term,
+        "relacionadosNaoAutorizados",
+        before,
+        after
+      );
+
+      term.relacionadosNaoAutorizados = after;
 
       markModified(term);
       return true;
@@ -4274,15 +4297,24 @@ function renderOriginalSummary(term) {
     function removeUnauthorizedRelation(term, index) {
       if (!term) return false;
 
-      const list = Array.isArray(term.relacionadosNaoAutorizados)
-        ? term.relacionadosNaoAutorizados
+      const before = Array.isArray(term.relacionadosNaoAutorizados)
+        ? [...term.relacionadosNaoAutorizados]
         : [];
 
-      if (!list[index]) return false;
+      if (!before[index]) return false;
 
       ensureOriginal(term);
 
-      term.relacionadosNaoAutorizados = removeValueAtIndex(list, index);
+      const after = removeValueAtIndex(before, index);
+
+      registerPendingFieldChange(
+        term,
+        "relacionadosNaoAutorizados",
+        before,
+        after
+      );
+
+      term.relacionadosNaoAutorizados = after;
 
       markModified(term);
       return true;
@@ -4293,39 +4325,55 @@ function renderOriginalSummary(term) {
 
       if (!term || !target || term.id === target.id) return false;
 
-      const list = Array.isArray(term.relacionadosNaoAutorizados)
-        ? term.relacionadosNaoAutorizados
+      const sourceBefore = Array.isArray(term.relacionadosNaoAutorizados)
+        ? [...term.relacionadosNaoAutorizados]
         : [];
 
-      const value = list[index];
+      const value = sourceBefore[index];
       if (!value) return false;
 
-      ensureOriginal(term);
-      ensureOriginal(target);
-
-      term.relacionadosNaoAutorizados = removeValueAtIndex(list, index);
-
-      target.relacionadosNaoAutorizados = Array.isArray(target.relacionadosNaoAutorizados)
-        ? target.relacionadosNaoAutorizados
+      const targetBefore = Array.isArray(target.relacionadosNaoAutorizados)
+        ? [...target.relacionadosNaoAutorizados]
         : [];
 
       const valueKey = normalizeUpDuplicateKey(value);
 
-      const targetAlreadyHasValue = target.relacionadosNaoAutorizados.some(existing =>
+      const targetAlreadyHasValue = targetBefore.some(existing =>
         normalizeUpDuplicateKey(existing) === valueKey
       );
 
       if (targetAlreadyHasValue) {
         alert(`O termo de destino já possui o UP "${value}".`);
         return false;
-}
+      }
 
-target.relacionadosNaoAutorizados.push(value);
+      ensureOriginal(term);
+      ensureOriginal(target);
 
-markModified(term);
-markModified(target);
+      const sourceAfter = removeValueAtIndex(sourceBefore, index);
+      const targetAfter = [...targetBefore, value];
 
-return true;
+      registerPendingFieldChange(
+        term,
+        "relacionadosNaoAutorizados",
+        sourceBefore,
+        sourceAfter
+      );
+
+      registerPendingFieldChange(
+        target,
+        "relacionadosNaoAutorizados",
+        targetBefore,
+        targetAfter
+      );
+
+      term.relacionadosNaoAutorizados = sourceAfter;
+      target.relacionadosNaoAutorizados = targetAfter;
+
+      markModified(term);
+      markModified(target);
+
+      return true;
     }
 
     function renderCompactRelatedList(term) {
