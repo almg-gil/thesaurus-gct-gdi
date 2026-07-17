@@ -4720,6 +4720,78 @@ function renderOriginalSummary(term) {
               };
             });
 
+            const suggestDeleteBtn = document.getElementById("suggestDeleteBtn");
+
+            if (suggestDeleteBtn) {
+            suggestDeleteBtn.onclick = async () => {
+            // Um termo novo ainda não existe na base oficial.
+            // Nesse caso, deve ser descartado pelo botão "Voltar ao original".
+            if (term.revisao === REVIEW_NOVO) {
+              alert(
+                'Este termo ainda é novo. Para descartá-lo, use o botão "Voltar ao original".'
+              );
+              return;
+            }
+
+            // Cancela uma sugestão de exclusão já existente.
+            if (term.revisao === REVIEW_EXCLUIR) {
+              const confirmed = confirm(
+                `Cancelar a sugestão de exclusão do termo "${displayTermName(term)}"?`
+              );
+
+              if (!confirmed) return;
+
+              const hasPendingFieldChanges =
+                Array.isArray(term.pendingChanges) &&
+                term.pendingChanges.length > 0;
+
+              // Se o termo já possuía outras alterações antes da sugestão
+              // de exclusão, retorna para o estado "alterado".
+              if (
+                term.original &&
+                (hasPendingFieldChanges || !termMatchesOriginal(term))
+              ) {
+                term.revisao = REVIEW_MODIFICADO;
+                registerReviewMetadata(term);
+              } else {
+                clearReview(term);
+              }
+
+              await saveState();
+              render();
+              setActiveTab("cadastro");
+              return;
+            }
+
+            if (childrenOf(term.id).length) {
+              const confirmed = confirm(
+                `O termo "${displayTermName(term)}" possui termos específicos.\n\n` +
+                "A exclusão somente poderá ser aprovada depois que esses termos forem movidos ou excluídos.\n\n" +
+                "Deseja registrar a sugestão de exclusão mesmo assim?"
+              );
+
+              if (!confirmed) return;
+            } else {
+              const confirmed = confirm(
+                `Sugerir a exclusão do termo "${displayTermName(term)}"?`
+              );
+
+              if (!confirmed) return;
+            }
+
+            // Guarda a situação original para permitir rejeição,
+            // cancelamento ou restauração posterior.
+            ensureOriginal(term);
+
+            term.revisao = REVIEW_EXCLUIR;
+            registerReviewMetadata(term);
+
+            await saveState();
+            render();
+            setActiveTab("cadastro");
+          };
+        }
+
             const addRelatedBtn = document.getElementById("addRelatedBtn");
             if (addRelatedBtn) {
               addRelatedBtn.onclick = async () => {
