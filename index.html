@@ -5325,17 +5325,32 @@ removeTermCompletely(term.id);
     }
 
       clearReview(term);
-    } else if (term.revisao === REVIEW_EXCLUIR) {
-      const justificativa = justificativaRecebida || pedirJustificativaRejeicao();
+   } else if (term.revisao === REVIEW_EXCLUIR) {
+          const justificativa =
+            justificativaRecebida || pedirJustificativaRejeicao();
 
-    if (justificativa === null) {
-      return;
-    }
+          if (justificativa === null) {
+            return;
+          }
 
-    registrarDecisao(term, "rejeitada", justificativa);
-    clearReview(term);
-    }
+          registrarDecisao(term, "rejeitada", justificativa);
 
+          const hasPendingFieldChanges =
+            Array.isArray(term.pendingChanges) &&
+            term.pendingChanges.length > 0;
+
+          // Rejeita somente a exclusão e preserva eventuais
+          // alterações que já estavam pendentes.
+          if (
+            term.original &&
+            (hasPendingFieldChanges || !termMatchesOriginal(term))
+          ) {
+            term.revisao = REVIEW_MODIFICADO;
+            registerReviewMetadata(term);
+          } else {
+            clearReview(term);
+          }
+        }
     await saveState();
     render();
 
